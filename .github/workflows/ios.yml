@@ -1,0 +1,54 @@
+# Builds an unsigned iPad app (.ipa) on a macOS runner, so no Mac is needed.
+# Sign and install it on the iPad with Sideloadly and a free Apple ID (see README).
+name: iOS-App bauen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Web-App bauen
+        run: |
+          npm ci
+          npm test
+          npm run build
+          npx cap sync ios
+
+      - name: Xcode-Projekt bauen (unsigniert)
+        run: |
+          xcodebuild -list -project ios/App/App.xcodeproj
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: IPA packen
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qry OpenStorm.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenStorm-ipa
+          path: app/OpenStorm.ipa
+          retention-days: 30
