@@ -19,10 +19,19 @@ if [ -d "$DIR/www" ]; then
   cp -r "$DIR/www" /opt/openstorm/www
 fi
 
-# WLAN: a network configured in the Raspberry Pi Imager wins; without it the Pi
-# opens its own network "OpenStorm" (password: openstorm).
+# WLAN: the network from openstorm-wlan.txt on the boot partition (editable on any
+# PC), else the Pi opens its own network "OpenStorm" (password: openstorm).
 install -d -m 700 /etc/NetworkManager/system-connections
 install -m 600 "$DIR/OpenStorm-Hotspot.nmconnection" /etc/NetworkManager/system-connections/
+install -m 755 "$DIR/wlan-setup.sh" /opt/openstorm/
+install -m 644 "$DIR/openstorm-wlan.service" /etc/systemd/system/
+systemctl enable openstorm-wlan.service
+for boot in /boot/firmware /boot; do
+  if [ -f "$boot/config.txt" ]; then
+    [ -f "$boot/openstorm-wlan.txt" ] || install -m 644 "$DIR/openstorm-wlan.txt" "$boot/"
+    break
+  fi
+done
 # WLAN stays blocked until a country is set; the bridge unblocks it (see service).
 for cmdline in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
   if [ -f "$cmdline" ] && ! grep -q ieee80211_regdom "$cmdline"; then
