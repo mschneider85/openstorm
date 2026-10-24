@@ -7,6 +7,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write # for publishing the release
+
 jobs:
   ios:
     runs-on: macos-15
@@ -14,9 +17,9 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -47,8 +50,16 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/App.app Payload/
           zip -qry OpenStorm.ipa Payload
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: OpenStorm-ipa
-          path: app/OpenStorm.ipa
-          retention-days: 30
+      # Every build becomes the latest release, so the app can be downloaded without
+      # a GitHub login: https://github.com/<owner>/<repo>/releases/latest/download/OpenStorm.ipa
+      - name: Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" OpenStorm.ipa \
+            --target "${{ github.sha }}" \
+            --title "OpenStorm Build ${{ github.run_number }}" \
+            --notes "$(git log -1 --format=%s)
+
+          Installation: OpenStorm.ipa herunterladen und mit Sideloadly aufs iPad übertragen (siehe README)." \
+            --latest
