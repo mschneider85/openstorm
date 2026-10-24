@@ -1,12 +1,23 @@
 #!/bin/sh
 # Installs the OpenStorm bridge on Raspberry Pi OS (Lite, 32 bit for the Pi Zero W).
-# Used by the image build; also works on an already running Pi: sudo sh install-pi.sh
+# Used by the image build and by every update of a running bridge (see Updater in
+# openstorm_bridge.py), so it must be safe to run again; also: sudo sh install-pi.sh
 set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
 
-apt-get update
-apt-get install -y --no-install-recommends bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon rfkill openssh-server
-pip3 install --break-system-packages --no-cache-dir bless==0.3.0
+# Downloads only when something is missing, so updates stay quick.
+PACKAGES="bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon rfkill openssh-server"
+BLESS_VERSION=0.3.0
+if ! dpkg -s $PACKAGES >/dev/null 2>&1; then
+  echo "Installiere Pakete …"
+  apt-get update
+  apt-get install -y --no-install-recommends $PACKAGES
+  apt-get clean
+fi
+if [ "$(pip3 show bless 2>/dev/null | sed -n 's/^Version: //p')" != "$BLESS_VERSION" ]; then
+  echo "Installiere bless $BLESS_VERSION …"
+  pip3 install --break-system-packages --no-cache-dir "bless==$BLESS_VERSION"
+fi
 
 install -d /opt/openstorm
 install -m 755 "$DIR/openstorm_bridge.py" /opt/openstorm/
@@ -50,4 +61,10 @@ for unit in apt-daily.timer apt-daily-upgrade.timer man-db.timer dphys-swapfile.
   systemctl disable "$unit" 2>/dev/null || true
 done
 
-apt-get clean
+# On a running Pi (update): pick up changed unit files and network profiles. The
+# bridge restarts itself afterwards.
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+  nmcli connection reload 2>/dev/null || true
+fi
+echo "Installation fertig: $(cat "$DIR/VERSION" 2>/dev/null || echo dev)"

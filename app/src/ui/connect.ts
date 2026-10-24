@@ -200,7 +200,8 @@ async function showUpdate(url: string, target: HTMLElement): Promise<void> {
   const button = el('button', 'btn primary', 'Jetzt aktualisieren');
   button.addEventListener('click', async () => {
     button.disabled = true;
-    status.textContent = 'Lade Update … (ca. 30 Sekunden, der Pi bleibt an)';
+    status.textContent =
+      'Installiere Update … Meist dauert das unter einer Minute, mit neuen Paketen einige Minuten. Den Pi bitte nicht ausschalten.';
     try {
       await installUpdate(url, info.latest);
       status.textContent = 'Update installiert. Die App wird neu geladen …';

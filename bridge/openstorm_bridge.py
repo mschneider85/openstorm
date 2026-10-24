@@ -30,7 +30,9 @@ Control commands (app -> bridge):    Events (bridge -> app):
                                        {"event": "error", "message": str}
 
 Updates come from the GitHub release "pi-update": version.json names the
-version and the SHA-256 of openstorm-update.tar.gz (this script, VERSION, www/).
+version and the SHA-256 of openstorm-update.tar.gz, which holds the bridge
+directory with the built app. Its install-pi.sh installs everything, including
+missing packages and changed services, like when the SD card image was built.
 """
 
 import asyncio
@@ -45,7 +47,7 @@ import socket
 import subprocess
 import sys
 import tarfile
-from typing import Callable, Dict, List, Optional
+from typing import Awaitable, Callable, Dict, List, Optional
 
 SERVICE_UUID = "5e3d0001-8b6f-4c1e-9a3f-0e7d3c2b1a00"
 DATA_IN_UUID = "5e3d0002-8b6f-4c1e-9a3f-0e7d3c2b1a00"
@@ -62,6 +64,7 @@ WWW_DIR = os.environ.get("OPENSTORM_WWW", "/opt/openstorm/www")
 HTTP_PORT = int(os.environ.get("OPENSTORM_HTTP_PORT", "80"))
 BLE_ENABLED = os.environ.get("OPENSTORM_BLE", "1") != "0"
 BLUETOOTH_RETRY_SECONDS = 5
+INSTALL_TIMEOUT_SECONDS = 30 * 60
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 UPDATE_URL = os.environ.get(
     "OPENSTORM_UPDATE_URL", "https://github.com/mschneider85/openstorm/releases/download/pi-update/")
@@ -81,34 +84,46 @@ def read_version(app_dir: str = APP_DIR) -> str:
         return "dev"
 
 
-def install_bundle(data: bytes, sha256: str, app_dir: str = APP_DIR) -> None:
-    """Checks an update bundle and replaces the bridge script, VERSION and www/ with it."""
+def unpack_bundle(data: bytes, sha256: str, dest: str) -> None:
+    """Checks an update bundle and unpacks it into dest (which is emptied first)."""
     if hashlib.sha256(data).hexdigest() != sha256:
         raise ValueError("Update beschädigt (Prüfsumme falsch), bitte nochmal versuchen")
-    new = os.path.join(app_dir, ".update")
-    shutil.rmtree(new, ignore_errors=True)
-    os.makedirs(new)
-    try:
-        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-            if hasattr(tarfile, "data_filter"):
-                tar.extractall(new, filter="data")
-            else:  # Python < 3.12 without the security backport
-                tar.extractall(new)
-        script = os.path.join(new, "openstorm_bridge.py")
-        if not os.path.isfile(script) or not os.path.isfile(os.path.join(new, "www", "index.html")):
-            raise ValueError("Update unvollständig")
-        py_compile.compile(script, doraise=True)
+    shutil.rmtree(dest, ignore_errors=True)
+    os.makedirs(dest)
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(dest, filter="data")
+        else:  # Python < 3.12 without the security backport
+            tar.extractall(dest)
+    for required in ("openstorm_bridge.py", "install-pi.sh", "VERSION", os.path.join("www", "index.html")):
+        if not os.path.isfile(os.path.join(dest, required)):
+            raise ValueError("Update unvollständig ({} fehlt)".format(required))
+    py_compile.compile(os.path.join(dest, "openstorm_bridge.py"), doraise=True)
 
-        www, old_www = os.path.join(app_dir, "www"), os.path.join(app_dir, "www.old")
-        shutil.rmtree(old_www, ignore_errors=True)
-        if os.path.isdir(www):
-            os.rename(www, old_www)
-        os.rename(os.path.join(new, "www"), www)
-        os.replace(script, os.path.join(app_dir, "openstorm_bridge.py"))
-        os.replace(os.path.join(new, "VERSION"), os.path.join(app_dir, "VERSION"))
-        shutil.rmtree(old_www, ignore_errors=True)
-    finally:
-        shutil.rmtree(new, ignore_errors=True)
+
+async def run_installer(directory: str) -> None:
+    """Runs install-pi.sh from an unpacked bundle: packages, services, bridge and app."""
+    process = await asyncio.create_subprocess_exec(
+        "sh", os.path.join(directory, "install-pi.sh"),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+        env=dict(os.environ, DEBIAN_FRONTEND="noninteractive"))
+    last = ""
+
+    async def read_output() -> None:
+        nonlocal last
+        async for raw in process.stdout:
+            line = raw.decode(errors="replace").rstrip()
+            if line:
+                last = line
+                log.info("install: %s", line)
+
+    try:
+        await asyncio.wait_for(asyncio.gather(read_output(), process.wait()), INSTALL_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        process.kill()
+        raise RuntimeError("Installation dauert zu lange, abgebrochen")
+    if process.returncode:
+        raise RuntimeError("Installation fehlgeschlagen: " + last)
 
 
 def chunks(data: bytes, size: int = CHUNK) -> List[bytes]:
@@ -390,9 +405,11 @@ class StatusLed:
 class Updater:
     """Fetches new versions of the bridge and the app from GitHub."""
 
-    def __init__(self, url: str = UPDATE_URL, app_dir: str = APP_DIR) -> None:
+    def __init__(self, url: str = UPDATE_URL, app_dir: str = APP_DIR,
+                 installer: Callable[[str], Awaitable[None]] = run_installer) -> None:
         self.url = url
         self.app_dir = app_dir
+        self.installer = installer
 
     @property
     def current(self) -> str:
@@ -418,15 +435,24 @@ class Updater:
     async def install(self) -> str:
         info = await self.latest()
         data = await self._get("openstorm-update.tar.gz")
-        install_bundle(data, info["sha256"], self.app_dir)
+        new = os.path.join(self.app_dir, ".update")
+        try:
+            unpack_bundle(data, info["sha256"], new)
+            log.info("Installing version %s", info["version"])
+            await self.installer(new)
+        finally:
+            shutil.rmtree(new, ignore_errors=True)
         log.info("Installed version %s", info["version"])
         return info["version"]
 
 
 def restart() -> None:
-    """Starts the (updated) bridge script anew in this process."""
-    script = os.path.join(APP_DIR, "openstorm_bridge.py")
-    os.execv(sys.executable, [sys.executable, script])
+    """Runs the (updated) bridge anew."""
+    if os.environ.get("INVOCATION_ID"):  # started by systemd; the unit file may have changed, too
+        subprocess.Popen(["systemctl", "--no-block", "restart", "openstorm-bridge.service"])
+    else:
+        script = os.path.join(APP_DIR, "openstorm_bridge.py")
+        os.execv(sys.executable, [sys.executable, script])
 
 
 class Bridge:

@@ -71,9 +71,12 @@ export abstract class BridgeConnection implements Transport {
     return this.request({ cmd: 'update_check' }, 'update_info', 30000);
   }
 
-  /** Installs the newest version; the bridge restarts itself afterwards. */
+  /**
+   * Installs the newest version; the bridge restarts itself afterwards. New
+   * packages can take minutes to install on a Pi Zero.
+   */
   async update(): Promise<string> {
-    return (await this.request({ cmd: 'update' }, 'updating', 180000)).version;
+    return (await this.request({ cmd: 'update' }, 'updating', 30 * 60000)).version;
   }
 
   private request<K extends BridgeEvent['event']>(

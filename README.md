@@ -73,8 +73,10 @@ Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernim
 
 **Hinweise:**
 - Projekte werden im Browser gespeichert, und zwar getrennt für jede Adresse. Nutze darum immer dieselbe Adresse, also `openstorm.local`.
-- **Updates:** Gibt es eine neue Version, meldet die App das beim Start. Unter *Verbindung → Brücke aktualisieren* tippst du auf **„Jetzt aktualisieren“**. Der Pi lädt Brücke und App von GitHub und startet nur die Brücke neu, nicht den ganzen Pi. Danach lädt die App sich selbst neu. Dafür muss der Pi im Heim-WLAN mit Internet sein.
-- Ein neues Pi-Image braucht es nur bei Änderungen am System, also an Paketen, Diensten oder WLAN-Einrichtung.
+- **Updates:** Gibt es eine neue Version, meldet die App das beim Start. Unter *Verbindung → Brücke aktualisieren* tippst du auf **„Jetzt aktualisieren“**. Der Pi lädt das Update von GitHub und installiert es. Dabei kommen auch neue Pakete, Dienste und WLAN-Einstellungen mit. Danach startet nur die Brücke neu, nicht der ganze Pi, und die App lädt sich selbst neu.
+  - Dauer: meist unter einer Minute, mit neuen Paketen einige Minuten. Den Pi währenddessen nicht ausschalten.
+  - Der Pi muss dafür im Heim-WLAN mit Internet sein.
+  - Das Pi-Image braucht man nur für die Ersteinrichtung. Ein komplettes Systemupdate aller Pakete (`apt upgrade`) macht OpenStorm bewusst nicht, weil es auf dem Pi Zero sehr lange dauert.
 
 ## Weitere Verbindungswege
 
