@@ -52,7 +52,10 @@ jobs:
           commands: |
             sh bridge/install-pi.sh
             # Login for maintenance (keyboard/SSH): user "openstorm", password "openstorm".
-            echo "openstorm:$(openssl passwd -6 openstorm)" > /boot/userconf.txt
+            id openstorm >/dev/null 2>&1 || useradd -m -s /bin/bash -G sudo,adm openstorm
+            echo openstorm:openstorm | chpasswd
+            systemctl disable userconfig.service 2>/dev/null || true
+            systemctl enable ssh
 
       - name: Image komprimieren
         run: |

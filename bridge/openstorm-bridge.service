@@ -1,10 +1,10 @@
 [Unit]
 Description=OpenStorm-Bruecke (App <-> EV3)
 After=bluetooth.service network.target
-Requires=bluetooth.service
+Wants=bluetooth.service
 
 [Service]
-ExecStartPre=-/usr/sbin/rfkill unblock wifi
+ExecStartPre=-/usr/sbin/rfkill unblock all
 ExecStart=/usr/bin/python3 /opt/openstorm/openstorm_bridge.py
 Environment=PYTHONUNBUFFERED=1
 StateDirectory=openstorm

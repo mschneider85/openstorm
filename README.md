@@ -43,7 +43,9 @@ Auf dem iPad muss **keine App installiert** werden.
 - **langsames Blinken:** bereit, aber kein EV3 verbunden
 - **Dauerlicht:** mit dem EV3 verbunden
 
-Wartungs-Login: Benutzer `openstorm`, Passwort `openstorm`.
+Wenn etwas nicht klappt:
+- **http://openstorm.local/log** zeigt das Protokoll der Brücke, des WLANs und von Bluetooth.
+- Wartungs-Login per Tastatur oder SSH (`ssh openstorm@openstorm.local`): Benutzer `openstorm`, Passwort `openstorm`.
 
 ### 2. EV3 einstellen (einmalig)
 

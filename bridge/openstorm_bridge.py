@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import socket
+import subprocess
 from typing import Callable, Dict, List, Optional
 
 SERVICE_UUID = "5e3d0001-8b6f-4c1e-9a3f-0e7d3c2b1a00"
@@ -47,6 +48,7 @@ STATE_FILE = os.environ.get("OPENSTORM_STATE", "/var/lib/openstorm/ev3.json")
 WWW_DIR = os.environ.get("OPENSTORM_WWW", "/opt/openstorm/www")
 HTTP_PORT = int(os.environ.get("OPENSTORM_HTTP_PORT", "80"))
 BLE_ENABLED = os.environ.get("OPENSTORM_BLE", "1") != "0"
+BLUETOOTH_RETRY_SECONDS = 5
 ADAPTER_PATH = "/org/bluez/hci0"
 
 log = logging.getLogger("openstorm")
@@ -230,12 +232,16 @@ class Bluez:
         from dbus_next.constants import BusType
 
         self.bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
-        self.bus.export(self.AGENT_PATH, make_agent())
-        manager = await self._interface("/org/bluez", "org.bluez.AgentManager1")
-        await manager.call_register_agent(self.AGENT_PATH, "KeyboardDisplay")
-        await manager.call_request_default_agent(self.AGENT_PATH)
-        adapter = await self._interface(ADAPTER_PATH, "org.bluez.Adapter1")
-        await adapter.set_powered(True)
+        try:
+            self.bus.export(self.AGENT_PATH, make_agent())
+            manager = await self._interface("/org/bluez", "org.bluez.AgentManager1")
+            await manager.call_register_agent(self.AGENT_PATH, "KeyboardDisplay")
+            await manager.call_request_default_agent(self.AGENT_PATH)
+            adapter = await self._interface(ADAPTER_PATH, "org.bluez.Adapter1")
+            await adapter.set_powered(True)
+        except Exception:
+            self.bus.disconnect()  # also drops the agent, so a retry starts clean
+            raise
 
     async def _interface(self, path: str, name: str):
         introspection = await self.bus.introspect("org.bluez", path)
@@ -342,10 +348,23 @@ class Bridge:
         self.busy = asyncio.Lock()
         self.data_sinks: List[Callable[[bytes], None]] = []
         self.event_sinks: List[Callable[[Dict], None]] = []
+        self.bluetooth_ready = asyncio.Event()
+        self.bluetooth_error: Optional[str] = "Bluetooth startet …"
 
     async def start(self) -> None:
+        """Brings up Bluetooth, retrying until it works (the app is served meanwhile)."""
         self.led.connected(False)
-        await self.bluez.start()
+        while True:
+            try:
+                await self.bluez.start()
+                break
+            except Exception as e:
+                self.bluetooth_error = str(e) or e.__class__.__name__
+                log.warning("Bluetooth not ready, retrying: %s", self.bluetooth_error)
+                await asyncio.sleep(BLUETOOTH_RETRY_SECONDS)
+        self.bluetooth_error = None
+        self.bluetooth_ready.set()
+        log.info("Bluetooth ready")
 
     # app -> bridge
 
@@ -364,6 +383,8 @@ class Bridge:
         name = cmd.get("cmd")
         log.info("Command: %s", name)
         try:
+            if name in ("scan", "connect") and self.bluetooth_error:
+                raise RuntimeError("Bluetooth der Brücke ist nicht bereit: " + self.bluetooth_error)
             if name == "status":
                 self._event(self._status())
             elif name == "scan":
@@ -406,6 +427,8 @@ class Bridge:
             "connected": self.link.connected,
             "address": self.state.get("address"),
             "name": self.state.get("name"),
+            "bluetooth": self.bluetooth_error is None,
+            "error": self.bluetooth_error,
         }
 
     # bridge -> apps
@@ -503,8 +526,19 @@ def make_web_app(bridge: Bridge, www_dir: str = WWW_DIR):
         response.headers["Cache-Control"] = "no-cache"
         return response
 
+    async def show_log(request):
+        """Recent log of the bridge, WLAN setup and Bluetooth, for troubleshooting."""
+        units = ["openstorm-bridge", "openstorm-wlan", "bluetooth", "hciuart", "NetworkManager"]
+        command = ["journalctl", "-b", "--no-pager", "-n", "400"] + [a for u in units for a in ("-u", u)]
+        try:
+            text = subprocess.run(command, capture_output=True, text=True, timeout=10).stdout
+        except (OSError, subprocess.SubprocessError) as e:
+            text = "journalctl failed: {}".format(e)
+        return web.Response(text=text)
+
     app = web.Application()
     app.router.add_get("/ws", websocket)
+    app.router.add_get("/log", show_log)
     app.router.add_get("/", index)
     if os.path.isdir(www_dir):
         app.router.add_static("/", www_dir)
@@ -516,13 +550,13 @@ async def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     bridge = Bridge()
-    await bridge.start()
-
+    # Serve the app first, so it shows what is wrong if Bluetooth does not come up.
     runner = web.AppRunner(make_web_app(bridge))
     await runner.setup()
     await web.TCPSite(runner, port=HTTP_PORT).start()
     log.info("App available on port %d", HTTP_PORT)
 
+    await bridge.start()
     if BLE_ENABLED:
         try:
             await BleFrontend(bridge).start()

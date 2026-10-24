@@ -1,6 +1,6 @@
 import { Ev3Brick } from '../ev3/ev3brick';
 import { SimBrick } from '../ev3/simbrick';
-import { BleBridge, WsBridge, bridgeUrlFromPage, webBluetoothAvailable, type BridgeConnection, type Ev3Device } from '../transport/bridge';
+import { BleBridge, WsBridge, bridgeUrlFromPage, webBluetoothAvailable, type BridgeConnection, type BridgeStatus, type Ev3Device } from '../transport/bridge';
 import { IosTransport, iosBluetoothAvailable, listPairedBricks, pairBrick } from '../transport/ios';
 import { SerialTransport, serialAvailable } from '../transport/serial';
 import type { Transport } from '../transport/transport';
@@ -94,7 +94,8 @@ async function useBridge(bridge: BridgeConnection, status: HTMLElement): Promise
   await connectWith('bridge', async () => bridge, status);
 }
 
-function describe(s: { connected: boolean; name: string | null }): string {
+function describe(s: BridgeStatus): string {
+  if (s.bluetooth === false) return `Brücke ✓ · Bluetooth nicht bereit: ${s.error ?? 'unbekannter Fehler'}`;
   if (s.connected) return `Brücke ✓ · EV3 „${s.name}“ verbunden ✓`;
   if (s.name) return `Brücke ✓ · EV3 „${s.name}“ nicht verbunden (aus oder außer Reichweite?)`;
   return 'Brücke ✓ · noch kein EV3 gekoppelt';

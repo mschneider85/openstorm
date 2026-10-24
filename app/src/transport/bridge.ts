@@ -17,7 +17,15 @@ export interface Ev3Device {
 }
 
 export type BridgeEvent =
-  | { event: 'status'; connected: boolean; address: string | null; name: string | null }
+  | {
+      event: 'status';
+      connected: boolean;
+      address: string | null;
+      name: string | null;
+      /** Missing on older bridges. */
+      bluetooth?: boolean;
+      error?: string | null;
+    }
   | { event: 'devices'; devices: Ev3Device[] }
   | { event: 'connected'; address: string; name: string }
   | { event: 'disconnected'; reason: string }
