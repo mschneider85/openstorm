@@ -32,9 +32,11 @@ npm run build   # Web-App nach app/dist
 
 Repository: https://github.com/mschneider85/openstorm (öffentlich, dadurch sind die Mac-Builds kostenlos)
 
-### 2. App bauen lassen
+### 2. App herunterladen
 
-Jeder Push auf `main` startet den Workflow **„iOS-App bauen“** (`.github/workflows/ios.yml`). Unter *Actions* kann man ihn auch per Hand starten. Nach etwa 5–10 Minuten liegt unter *Actions → letzter Lauf → Artifacts* die Datei **OpenStorm-ipa**. Sie herunterladen und entpacken, dann hast du `OpenStorm.ipa`.
+Jeder Push auf `main` startet den Workflow **„iOS-App bauen“** (`.github/workflows/ios.yml`). Unter *Actions* kann man ihn auch per Hand starten. Nach etwa 2–10 Minuten erscheint die App als neues Release. Die neueste Version gibt es immer hier, ohne GitHub-Anmeldung:
+
+**https://github.com/mschneider85/openstorm/releases/latest/download/OpenStorm.ipa**
 
 ### 3. Mit Sideloadly aufs iPad
 
