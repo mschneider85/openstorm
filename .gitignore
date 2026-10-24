@@ -3,3 +3,4 @@ dist/
 dev-dist/
 *.ipa
 .DS_Store
+__pycache__/
