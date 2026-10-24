@@ -1,0 +1,56 @@
+# Builds a ready-to-flash Raspberry Pi OS image (Pi Zero W) with the OpenStorm bridge.
+# Download: https://github.com/<owner>/<repo>/releases/download/pi-image/openstorm-pi.img.xz
+name: Raspberry-Pi-Image bauen
+
+on:
+  push:
+    branches: [main]
+    paths: ['bridge/**', '.github/workflows/pi-image.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Brücke testen
+        working-directory: bridge
+        run: python3 -m unittest -v
+
+      - name: Image bauen
+        id: build
+        uses: pguyot/arm-runner-action@v2
+        with:
+          base_image: raspios_lite:latest
+          image_additional_mb: 512
+          copy_repository_path: /opt/openstorm-src
+          shell: /bin/bash
+          commands: |
+            sh bridge/install-pi.sh
+            # Login for maintenance (keyboard/SSH): user "openstorm", password "openstorm".
+            echo "openstorm:$(openssl passwd -6 openstorm)" > /boot/userconf.txt
+
+      - name: Image komprimieren
+        run: |
+          sudo mv "${{ steps.build.outputs.image }}" openstorm-pi.img
+          sudo chown "$USER" openstorm-pi.img
+          xz -T0 -6 openstorm-pi.img
+          ls -lh openstorm-pi.img.xz
+
+      # A fixed tag keeps the download link stable; "latest" stays reserved for the iPad app.
+      - name: Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete pi-image --yes --cleanup-tag || true
+          gh release create pi-image openstorm-pi.img.xz \
+            --target "${{ github.sha }}" \
+            --title "Raspberry-Pi-Image (Pi Zero W)" \
+            --latest=false \
+            --notes "OpenStorm-Brücke für den Raspberry Pi Zero W, Stand: $(git log -1 --format='%h %s')
+
+          Mit dem Raspberry Pi Imager auf eine SD-Karte schreiben (\"Eigenes Image\"), siehe README."
