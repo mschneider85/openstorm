@@ -95,6 +95,41 @@ class UpdaterTest(unittest.TestCase):
             asyncio.run(updater.install())
         self.assertEqual(os.listdir(updater.app_dir), [])
 
+    def test_quick_update_when_system_files_are_unchanged(self):
+        calls = []
+
+        async def installer(directory):
+            calls.append(directory)
+
+        updater = FakeServerUpdater(COMPLETE, installer)
+        bundle_dir = tempfile.mkdtemp()
+        for name, text in COMPLETE.items():
+            os.makedirs(os.path.dirname(os.path.join(bundle_dir, name)), exist_ok=True)
+            with open(os.path.join(bundle_dir, name), "w") as f:
+                f.write("changed" if name in ("openstorm_bridge.py", "www/index.html") else text)
+        with open(os.path.join(updater.app_dir, "SYSTEM"), "w") as f:
+            f.write(ob.system_fingerprint(bundle_dir) + "\n")  # as install-pi.sh writes it
+
+        self.assertEqual(asyncio.run(updater.install()), "v2")
+        self.assertEqual(calls, [])
+        self.assertEqual(read(os.path.join(updater.app_dir, "openstorm_bridge.py")), "NEW = 2\n")
+        self.assertEqual(read(os.path.join(updater.app_dir, "www", "index.html")), "new")
+        self.assertEqual(ob.read_version(updater.app_dir), "v2")
+        self.assertEqual(sorted(os.listdir(updater.app_dir)), ["SYSTEM", "VERSION", "openstorm_bridge.py", "www"])
+
+    def test_fingerprint_ignores_app_and_tests_but_not_system_files(self):
+        a, b = tempfile.mkdtemp(), tempfile.mkdtemp()
+        for d, script, service in ((a, "x = 1", "A"), (b, "x = 2", "A")):
+            os.makedirs(os.path.join(d, "www"))
+            for name, text in (("openstorm_bridge.py", script), ("www/index.html", script),
+                               ("test_web.py", script), ("bridge.service", service)):
+                with open(os.path.join(d, name), "w") as f:
+                    f.write(text)
+        self.assertEqual(ob.system_fingerprint(a), ob.system_fingerprint(b))
+        with open(os.path.join(b, "bridge.service"), "w") as f:
+            f.write("B")
+        self.assertNotEqual(ob.system_fingerprint(a), ob.system_fingerprint(b))
+
     def test_real_installer_reports_last_output_line(self):
         directory = tempfile.mkdtemp()
         with open(os.path.join(directory, "install-pi.sh"), "w") as f:

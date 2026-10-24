@@ -101,6 +101,38 @@ def unpack_bundle(data: bytes, sha256: str, dest: str) -> None:
     py_compile.compile(os.path.join(dest, "openstorm_bridge.py"), doraise=True)
 
 
+# What a quick update replaces; everything else in the bundle belongs to the system setup.
+APP_FILES = ("openstorm_bridge.py", "VERSION", "SYSTEM", "www")
+
+
+def system_fingerprint(directory: str) -> str:
+    """Hash of the system setup files (installer, services, network profiles) in directory."""
+    digest = hashlib.sha256()
+    for root, dirs, files in os.walk(directory):
+        dirs[:] = sorted(d for d in dirs if d != "__pycache__" and not (root == directory and d in APP_FILES))
+        for name in sorted(files):
+            path = os.path.join(root, name)
+            rel = os.path.relpath(path, directory)
+            if rel in APP_FILES or name.startswith("test_"):
+                continue
+            with open(path, "rb") as f:
+                digest.update(rel.encode() + b"\0" + f.read() + b"\0")
+    return digest.hexdigest()
+
+
+def replace_app(new: str, app_dir: str) -> None:
+    """Quick update: swaps only the bridge script, VERSION and the web app."""
+    www, old_www = os.path.join(app_dir, "www"), os.path.join(app_dir, "www.old")
+    shutil.rmtree(old_www, ignore_errors=True)
+    if os.path.isdir(www):
+        os.rename(www, old_www)
+    shutil.copytree(os.path.join(new, "www"), www)
+    for name in ("openstorm_bridge.py", "VERSION"):
+        shutil.copy(os.path.join(new, name), os.path.join(app_dir, name + ".new"))
+        os.replace(os.path.join(app_dir, name + ".new"), os.path.join(app_dir, name))
+    shutil.rmtree(old_www, ignore_errors=True)
+
+
 async def run_installer(directory: str) -> None:
     """Runs install-pi.sh from an unpacked bundle: packages, services, bridge and app."""
     process = await asyncio.create_subprocess_exec(
@@ -429,6 +461,14 @@ class Updater:
         except aiohttp.ClientResponseError as e:
             raise RuntimeError("Update-Server antwortet nicht ({})".format(e.status)) from e
 
+    def _installed_system(self) -> Optional[str]:
+        """Fingerprint written by install-pi.sh after its last successful run."""
+        try:
+            with open(os.path.join(self.app_dir, "SYSTEM")) as f:
+                return f.read().strip()
+        except OSError:
+            return None
+
     async def latest(self) -> Dict:
         return json.loads(await self._get("version.json"))
 
@@ -438,8 +478,12 @@ class Updater:
         new = os.path.join(self.app_dir, ".update")
         try:
             unpack_bundle(data, info["sha256"], new)
-            log.info("Installing version %s", info["version"])
-            await self.installer(new)
+            if self._installed_system() == system_fingerprint(new):
+                log.info("Quick update to %s (system setup unchanged)", info["version"])
+                replace_app(new, self.app_dir)
+            else:
+                log.info("Installing version %s", info["version"])
+                await self.installer(new)
         finally:
             shutil.rmtree(new, ignore_errors=True)
         log.info("Installed version %s", info["version"])
@@ -704,4 +748,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    if sys.argv[1:2] == ["--fingerprint"]:  # used by install-pi.sh
+        print(system_fingerprint(sys.argv[2]))
+    else:
+        asyncio.run(main())

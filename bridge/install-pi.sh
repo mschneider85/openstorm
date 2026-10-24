@@ -67,4 +67,6 @@ if [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true
   nmcli connection reload 2>/dev/null || true
 fi
+# Lets the next update skip this script if none of the system files changed.
+python3 "$DIR/openstorm_bridge.py" --fingerprint "$DIR" > /opt/openstorm/SYSTEM
 echo "Installation fertig: $(cat "$DIR/VERSION" 2>/dev/null || echo dev)"
