@@ -30,20 +30,20 @@ Auf dem iPad muss **keine App installiert** werden.
    **https://github.com/mschneider85/openstorm/releases/download/pi-image/openstorm-pi.img.xz**
 2. Den [Raspberry Pi Imager](https://www.raspberrypi.com/software/) öffnen und unter *Gerät* „Raspberry Pi Zero“ wählen.
 3. Unter *Betriebssystem* ganz unten **„Eigenes Image“** wählen und die heruntergeladene Datei angeben. Entpacken ist nicht nötig.
-4. SD-Karte wählen. Bei der Frage nach **„OS-Anpassungen“**:
-   - **Mit Heim-WLAN (empfohlen):** *Einstellungen bearbeiten* → WLAN-Name, Passwort und Land eintragen.
-     Das iPad bleibt dann in deinem normalen WLAN.
-   - **Ohne:** *Nein*. Der Pi öffnet dann sein eigenes WLAN **„OpenStorm“** (Passwort `openstorm`).
-     Während das iPad damit verbunden ist, hat es kein Internet.
-5. SD-Karte in den Pi stecken und Strom anschließen, über eine Powerbank oder den USB-Port des EV3.
-   Nach etwa 40–60 Sekunden ist die Brücke bereit.
-   Findet der Pi das eingetragene Heim-WLAN nicht, öffnet er automatisch sein eigenes.
+4. SD-Karte wählen und schreiben. Die Frage nach „OS-Anpassungen“ mit *Nein* beantworten; bei eigenen Images ist das ohnehin ausgegraut.
+5. **Heim-WLAN eintragen (empfohlen):**
+   - Die SD-Karte nach dem Schreiben kurz aus- und wieder einstecken. Windows zeigt dann ein Laufwerk **„bootfs“**.
+   - Darin die Datei **`openstorm-wlan.txt`** mit dem Editor öffnen.
+   - `WLAN_NAME=` und `WLAN_PASSWORT=` ausfüllen und speichern.
+   - Ohne Eintrag oder wenn das WLAN nicht erreichbar ist, öffnet der Pi sein eigenes WLAN **„OpenStorm“** (Passwort `openstorm`). Während das iPad damit verbunden ist, hat es kein Internet.
+6. SD-Karte in den Pi stecken und Strom anschließen, über eine Powerbank oder den USB-Port des EV3.
+   Nach etwa 1 Minute ist die Brücke bereit.
 
 **Die grüne Leuchte am Pi:**
 - **langsames Blinken:** bereit, aber kein EV3 verbunden
 - **Dauerlicht:** mit dem EV3 verbunden
 
-Wartungs-Login: Benutzer `openstorm`, Passwort `openstorm`, sofern im Imager nichts anderes eingestellt wurde.
+Wartungs-Login: Benutzer `openstorm`, Passwort `openstorm`.
 
 ### 2. EV3 einstellen (einmalig)
 
@@ -130,6 +130,7 @@ bridge/
   openstorm_bridge.py      Webserver + WebSocket (WLAN) und BLE-Dienst ⇄ RFCOMM (EV3),
                            koppelt den EV3 mit PIN 1234, steuert die Status-Leuchte
   OpenStorm-Hotspot.nmconnection   eigenes WLAN, falls kein Heim-WLAN eingerichtet ist
+  openstorm-wlan.txt       Vorlage auf der SD-Karte für Heim-WLAN (wlan-setup.sh liest sie)
   install-pi.sh            Installation auf Raspberry Pi OS (auch für den Image-Build)
 ```
 

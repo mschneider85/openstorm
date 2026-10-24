@@ -1,0 +1,9 @@
+# Heim-WLAN für die OpenStorm-Brücke
+#
+# Trage hier den Namen und das Passwort deines WLANs ein, speichere die Datei
+# und stecke die SD-Karte wieder in den Raspberry Pi.
+# Bleibt WLAN_NAME leer (oder ist das WLAN nicht erreichbar), öffnet der Pi
+# sein eigenes WLAN "OpenStorm" (Passwort: openstorm, Adresse: http://10.42.0.1).
+
+WLAN_NAME=
+WLAN_PASSWORT=
