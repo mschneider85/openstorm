@@ -160,6 +160,20 @@ button:disabled {
   box-shadow: 0 0 8px #4cd964;
 }
 
+.transfer {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: none;
+  color: var(--bar-text);
+  border-radius: 10px;
+  padding: 8px 14px;
+  min-height: 44px;
+  font-weight: 700;
+}
+
+.transfer:disabled {
+  opacity: 0.5;
+}
+
 .run,
 .stop {
   border: 0;
@@ -692,6 +706,20 @@ dialog::backdrop {
   gap: 8px;
   border-top: 1px solid var(--border);
   padding: 6px 0;
+}
+
+.ev3-projects {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.ev3-projects h3 {
+  margin: 0 0 4px;
+}
+
+.ev3-projects .muted {
+  margin: 0 0 10px;
 }
 
 .project-row.current .project-name {

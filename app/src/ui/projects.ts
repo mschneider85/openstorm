@@ -1,4 +1,4 @@
-import { currentProject, deleteProject, exportProject, importProject, listProjects, newProject, openProject, renameProject } from './editor';
+import { currentProject, deleteProject, exportProject, importProject, listOnEv3, listProjects, loadFromEv3, newProject, openProject, renameProject } from './editor';
 import { log } from './console';
 
 let dialog: HTMLDialogElement;
@@ -58,6 +58,39 @@ async function share(): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+async function showEv3Projects(target: HTMLElement): Promise<void> {
+  target.replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Lese den EV3 …' }));
+  try {
+    const folders = await listOnEv3();
+    target.replaceChildren();
+    if (folders.length === 0) {
+      target.append(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Noch keine OpenStorm-Programme auf dem EV3.' }));
+    }
+    for (const folder of folders) {
+      const row = document.createElement('div');
+      row.className = 'project-row';
+      const name = document.createElement('span');
+      name.className = 'project-name';
+      name.textContent = folder.replace(/_/g, ' ');
+      const open = document.createElement('button');
+      open.className = 'btn small';
+      open.textContent = 'Öffnen';
+      open.addEventListener('click', async () => {
+        try {
+          await loadFromEv3(folder);
+          dialog.close();
+        } catch (e) {
+          log(`Laden vom EV3 fehlgeschlagen: ${(e as Error).message}`, 'error');
+        }
+      });
+      row.append(name, open);
+      target.append(row);
+    }
+  } catch (e) {
+    target.replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: (e as Error).message }));
+  }
+}
+
 export function initProjects(d: HTMLDialogElement): void {
   dialog = d;
   list = d.querySelector('.project-list')!;
@@ -69,6 +102,7 @@ export function initProjects(d: HTMLDialogElement): void {
     dialog.close();
   });
   d.querySelector('#project-export')!.addEventListener('click', () => void share());
+  d.querySelector('#ev3-list')!.addEventListener('click', () => void showEv3Projects(d.querySelector('.ev3-list')!));
   const input = d.querySelector<HTMLInputElement>('#project-import-file')!;
   d.querySelector('#project-import')!.addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
@@ -87,5 +121,6 @@ export function initProjects(d: HTMLDialogElement): void {
 
 export function openProjectsDialog(): void {
   render();
+  dialog.querySelector('.ev3-list')!.replaceChildren();
   dialog.showModal();
 }

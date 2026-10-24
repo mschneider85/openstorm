@@ -1,4 +1,4 @@
-import { DIRECT_REPLY, DIRECT_REPLY_ERROR } from './bytecodes';
+import { DIRECT_REPLY, DIRECT_REPLY_ERROR, SYSTEM_COMMAND_REPLY, SYSTEM_REPLY, SYSTEM_REPLY_ERROR } from './bytecodes';
 import type { Command } from './command';
 import type { Transport } from '../transport/transport';
 
@@ -8,7 +8,13 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>;
 }
 
-/** Sends direct commands over a transport and matches replies by message counter. */
+export interface SystemReply {
+  status: number;
+  /** Everything after the status byte. */
+  data: Uint8Array;
+}
+
+/** Sends direct and system commands over a transport and matches replies by message counter. */
 export class Ev3Connection {
   private counter = 0;
   private pending = new Map<number, Pending>();
@@ -24,6 +30,23 @@ export class Ev3Connection {
 
   /** Executes a command and resolves with its global variable area. */
   execute(cmd: Command): Promise<DataView> {
+    return this.request((id) => cmd.frame(id));
+  }
+
+  /** Executes a system command (file transfer); errors are returned as status, not thrown. */
+  async system(command: number, payload: ArrayLike<number>): Promise<SystemReply> {
+    const reply = await this.request((id) => {
+      const length = 4 + payload.length;
+      const frame = new Uint8Array(2 + length);
+      frame.set([length & 0xff, length >> 8, id & 0xff, id >> 8, SYSTEM_COMMAND_REPLY, command]);
+      frame.set(payload, 6);
+      return frame;
+    });
+    // reply: command, status, data...
+    return { status: reply.getUint8(1), data: new Uint8Array(reply.buffer, reply.byteOffset + 2, reply.byteLength - 2) };
+  }
+
+  private request(frame: (id: number) => Uint8Array): Promise<DataView> {
     this.counter = (this.counter + 1) & 0xffff;
     const id = this.counter;
     return new Promise((resolve, reject) => {
@@ -32,7 +55,7 @@ export class Ev3Connection {
         reject(new Error('Keine Antwort vom EV3 (Zeitüberschreitung)'));
       }, this.timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
-      this.transport.send(cmd.frame(id));
+      this.transport.send(frame(id));
     });
   }
 
@@ -49,7 +72,7 @@ export class Ev3Connection {
     this.pending.delete(id);
     clearTimeout(entry.timer);
     const type = frame[4];
-    if (type === DIRECT_REPLY) {
+    if (type === DIRECT_REPLY || type === SYSTEM_REPLY || type === SYSTEM_REPLY_ERROR) {
       entry.resolve(new DataView(frame.buffer, frame.byteOffset + 5, frame.length - 5));
     } else if (type === DIRECT_REPLY_ERROR) {
       entry.reject(new Error('EV3 meldet einen Fehler beim Ausführen des Befehls'));

@@ -4,7 +4,7 @@ import { state } from './state';
 import { clearLog } from './ui/console';
 import { autoConnect, initConnect, openConnectDialog } from './ui/connect';
 import { initDevices, setDevicesVisible } from './ui/devices';
-import { currentProject, initEditor, resizeEditor, startProgram, stopProgram } from './ui/editor';
+import { currentProject, initEditor, resizeEditor, startOnEv3, startProgram, stopProgram, transferToEv3 } from './ui/editor';
 import { initProjects, openProjectsDialog } from './ui/projects';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
@@ -38,6 +38,16 @@ projectBtn.addEventListener('click', openProjectsDialog);
 $('#connect-btn').addEventListener('click', openConnectDialog);
 $('#run-btn').addEventListener('click', () => void startProgram());
 $('#stop-btn').addEventListener('click', () => void stopProgram());
+$('#transfer-btn').addEventListener('click', async () => {
+  const btn = $<HTMLButtonElement>('#transfer-btn');
+  btn.disabled = true;
+  try {
+    const path = await transferToEv3();
+    if (path && confirm('Das Programm ist jetzt auf dem EV3 gespeichert. Gleich dort starten?')) await startOnEv3(path);
+  } finally {
+    btn.disabled = state.running;
+  }
+});
 $('#console-clear').addEventListener('click', clearLog);
 $('#console-toggle').addEventListener('click', () => {
   $('#console').classList.toggle('collapsed');
@@ -50,6 +60,7 @@ state.subscribe(() => {
   btn.dataset.kind = state.kind;
   btn.querySelector('.conn-label')!.textContent = LABELS[state.kind] || state.brick!.name;
   $<HTMLButtonElement>('#run-btn').disabled = state.running;
+  $<HTMLButtonElement>('#transfer-btn').disabled = state.running;
   $<HTMLButtonElement>('#stop-btn').disabled = !state.running;
   if (!state.brick && state.running) void stopProgram();
 });

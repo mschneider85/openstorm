@@ -15,6 +15,7 @@ import {
 import { ALL_PORTS, inputPortNumber, type Brick, type MotorPort, type Port, type PortState } from './brick';
 import { Command, portMask } from './command';
 import { Ev3Connection } from './connection';
+import { Ev3Files } from './files';
 import type { Transport } from '../transport/transport';
 
 const LAYER = 0;
@@ -24,10 +25,12 @@ const SCREEN_WIDTH = 178;
 /** A real EV3 brick, controlled with direct commands. */
 export class Ev3Brick implements Brick {
   private conn: Ev3Connection;
+  readonly files: Ev3Files;
   name = 'EV3';
 
   private constructor(transport: Transport) {
     this.conn = new Ev3Connection(transport);
+    this.files = new Ev3Files(this.conn);
   }
 
   static async connect(transport: Transport, onClose: (reason: string) => void): Promise<Ev3Brick> {

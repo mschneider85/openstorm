@@ -1,4 +1,5 @@
 import type { ButtonName, LedPattern } from './bytecodes';
+import type { BrickFiles } from './files';
 
 export type MotorPort = 'A' | 'B' | 'C' | 'D';
 export type SensorPort = '1' | '2' | '3' | '4';
@@ -53,6 +54,9 @@ export interface Brick {
   displayText(text: string, line: number): Promise<void>;
   displayClear(): Promise<void>;
   battery(): Promise<{ voltage: number; percent: number }>;
+
+  /** Files and programs on the brick; missing for the simulator. */
+  readonly files?: BrickFiles;
 
   close(): void;
 }

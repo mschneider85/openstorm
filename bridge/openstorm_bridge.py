@@ -581,6 +581,9 @@ class Bridge:
                 asyncio.get_event_loop().call_later(1, self.restart)
             else:
                 reply({"event": "error", "message": "Unbekannter Befehl: {}".format(name)})
+        except RuntimeError as e:  # expected failures with a message for the app
+            log.warning("Command %s failed: %s", name, e)
+            reply({"event": "error", "message": str(e)})
         except Exception as e:  # report every failure to the app instead of dying
             log.exception("Command %s failed", name)
             reply({"event": "error", "message": str(e) or e.__class__.__name__})

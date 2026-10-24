@@ -1,3 +1,4 @@
+import { gv, lc, lcs } from './assembler';
 import { DIRECT_COMMAND_NO_REPLY, DIRECT_COMMAND_REPLY } from './bytecodes';
 
 /**
@@ -19,39 +20,19 @@ export class Command {
 
   /** Appends an integer constant. */
   lc(value: number): this {
-    const v = Math.round(value);
-    if (v >= -31 && v <= 31) {
-      this.code.push(v & 0x3f);
-    } else if (v >= -128 && v <= 127) {
-      this.code.push(0x81, v & 0xff);
-    } else if (v >= -32768 && v <= 32767) {
-      this.code.push(0x82, v & 0xff, (v >> 8) & 0xff);
-    } else {
-      this.code.push(0x83, v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff);
-    }
+    this.code.push(...lc(value));
     return this;
   }
 
   /** Appends a zero-terminated string constant (ASCII only). */
   lcs(text: string): this {
-    this.code.push(0x84);
-    for (const ch of text) {
-      const c = ch.charCodeAt(0);
-      this.code.push(c > 0 && c < 128 ? c : 0x3f);
-    }
-    this.code.push(0);
+    this.code.push(...lcs(text));
     return this;
   }
 
   /** Appends a reference to the global variable at `offset`. */
   gv(offset: number): this {
-    if (offset < 32) {
-      this.code.push(0x60 | offset);
-    } else if (offset < 256) {
-      this.code.push(0xe1, offset);
-    } else {
-      this.code.push(0xe2, offset & 0xff, offset >> 8);
-    }
+    this.code.push(...gv(offset));
     return this;
   }
 

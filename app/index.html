@@ -21,6 +21,7 @@
       <button id="project-btn" class="project-btn" title="Projekte"></button>
       <div class="spacer"></div>
       <button id="connect-btn" class="conn" data-kind="none"><span class="dot"></span><span class="conn-label">Nicht verbunden</span></button>
+      <button id="transfer-btn" class="transfer" title="Programm auf den EV3 übertragen, damit er es ohne iPad ausführt">⇩ Auf EV3</button>
       <button id="run-btn" class="run">▶ Start</button>
       <button id="stop-btn" class="stop" disabled>■ Stopp</button>
     </header>
@@ -54,6 +55,12 @@
           <input id="project-import-file" type="file" accept=".json,application/json" hidden />
         </div>
         <div class="project-list"></div>
+        <section class="ev3-projects">
+          <h3>Auf dem EV3</h3>
+          <p class="muted">Mit „⇩ Auf EV3“ übertragene Programme lassen sich hier wieder öffnen.</p>
+          <button id="ev3-list" class="btn">Programme auf dem EV3 anzeigen</button>
+          <div class="project-list ev3-list"></div>
+        </section>
       </div>
     </dialog>
 

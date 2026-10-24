@@ -6,7 +6,9 @@ Blockprogrammierung für LEGO MINDSTORMS EV3 auf dem iPad, ohne Mac, ohne Kabel 
 - **Geräte**: Zeigt, was an den Ports 1–4 und A–D steckt, mit Live-Werten und umschaltbarem Modus. Motoren lassen sich per Antippen und Halten bewegen. Außerdem gibt es Statusleuchte, Ton und Anzeige zum Ausprobieren.
 - **Simulator**: Ein virtueller EV3 im Browser. Sensorwerte stellt man unter „Geräte“ ein, Töne sind hörbar, und die Anzeige wird nachgebildet.
 
-Programme laufen in der App und steuern den EV3 live per Bluetooth über *Direct Commands*. Das iPad muss also während des Programms verbunden bleiben.
+Programme laufen auf zwei Arten:
+- **▶ Start:** Das Programm läuft in der App und steuert den EV3 live. Die gerade aktiven Blöcke leuchten auf. Das iPad muss dafür verbunden bleiben.
+- **⇩ Auf EV3:** Die App übersetzt das Programm in die Maschinensprache des EV3 (`.rbf`, wie die originale LEGO-Software) und speichert es auf dem Stein. Dort läuft es ohne iPad.
 
 ## So funktioniert es
 
@@ -71,6 +73,14 @@ Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernim
 - **Danach** verbindet sich OpenStorm beim Öffnen **automatisch** mit diesem EV3.
 - Im Verbindungsdialog steht, ob die Brücke erreichbar und der EV3 verbunden ist.
 
+### 5. Programme auf dem EV3
+
+- **Übertragen:** Oben auf **„⇩ Auf EV3“** tippen. Die App fragt danach, ob das Programm gleich starten soll.
+- **Am Stein starten:** *Datei-Navigation* (zweiter Reiter) → Ordner mit dem Projektnamen → Programm. Mit der Zurück-Taste stoppen.
+- **Zurückholen:** *Projekte* → **„Programme auf dem EV3 anzeigen“** → **Öffnen**. Das geht, weil OpenStorm neben jedem Programm eine unsichtbare Kopie der Blöcke ablegt (`.openstorm`).
+- Programme aus der originalen LEGO-Software lassen sich so nicht öffnen. Auf dem Stein liegt von ihnen nur das übersetzte Programm, nicht die Blöcke.
+- Auf dem EV3 hat „in der App ausgeben“ keine Wirkung. Rekursive eigene Blöcke (ein Block ruft sich selbst auf) gehen dort nicht. Eine Variable muss entweder immer Text oder immer eine Zahl enthalten.
+
 **Hinweise:**
 - Projekte werden im Browser gespeichert, und zwar getrennt für jede Adresse. Nutze darum immer dieselbe Adresse, also `openstorm.local`.
 - **Updates:** Gibt es eine neue Version, meldet die App das beim Start. Unter *Verbindung → Brücke aktualisieren* tippst du auf **„Jetzt aktualisieren“**. Der Pi lädt das Update von GitHub und installiert es. Dabei kommen auch neue Pakete, Dienste und WLAN-Einstellungen mit. Danach startet nur die Brücke neu, nicht der ganze Pi, und die App lädt sich selbst neu.
@@ -124,13 +134,13 @@ Ihr Protokoll zeigt `journalctl -u openstorm-bridge -f`.
 
 ```
 app/
-  src/ev3/          EV3-Protokoll: Bytecode-Encoder, Direct Commands, Simulator
+  src/ev3/          EV3-Protokoll: Bytecode-Assembler, Direct Commands, Dateiübertragung, Simulator
   src/transport/    Verbindungen: Pi-Brücke (Web Bluetooth), iOS-Plugin, Web Serial
-  src/blocks/       Block-Definitionen, Werkzeugleiste, Code-Generator
+  src/blocks/       Block-Definitionen, Werkzeugleiste, Code-Generator (App) und rbf.ts (Compiler für den EV3)
   src/runtime/      führt den erzeugten Code aus (Start/Stopp, parallele Abläufe)
   src/ui/           Editor, Geräte-Seite, Dialoge
   ios/App/App/      Xcode-Projekt; EV3Plugin.swift ist das Bluetooth-Plugin
-  test/             Vitest-Tests
+  test/             Vitest-Tests; ev3vm.ts bildet die EV3-VM nach (Prüfung wie die Firmware + Ausführung)
 bridge/
   openstorm_bridge.py      Webserver + WebSocket (WLAN) und BLE-Dienst ⇄ RFCOMM (EV3),
                            koppelt den EV3 mit PIN 1234, steuert die Status-Leuchte
@@ -141,6 +151,5 @@ bridge/
 
 ## Ideen für später
 
-- Programme in EV3-Bytecode (`.rbf`) übersetzen und auf den Stein laden, damit sie ohne iPad laufen
 - Brücke auf einem ESP32 (startet in einer Sekunde, verträgt hartes Ausschalten)
 - weitere Blöcke: Gyro zurücksetzen, Datenprotokollierung, Nachrichten zwischen Steinen

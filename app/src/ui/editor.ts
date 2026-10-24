@@ -3,6 +3,9 @@ import 'blockly/blocks';
 import * as De from 'blockly/msg/de';
 import { defineBlocks } from '../blocks/definitions';
 import { compile } from '../blocks/generator';
+import { RbfError, compileRbf } from '../blocks/rbf';
+import { ascii } from '../ev3/assembler';
+import type { BrickFiles } from '../ev3/files';
 import { theme, toolbox } from '../blocks/toolbox';
 import { ProgramRun } from '../runtime/runner';
 import { state } from '../state';
@@ -141,6 +144,106 @@ export function importProject(json: string): void {
   const data = JSON.parse(json) as { app?: string; name?: string; workspace?: object };
   if (data.app !== 'openstorm' || !data.workspace) throw new Error('Keine OpenStorm-Projektdatei');
   newProject(data.name ?? 'Importiert', data.workspace);
+}
+
+// --- Programs on the EV3 ------------------------------------------------------------
+
+/** Next to every program the blocks are stored, hidden from the brick's file browser. */
+const SOURCE_FILE = '.openstorm';
+
+/** Folder and program name on the brick: ASCII letters, digits, "_" and "-". */
+export function brickName(name: string): string {
+  return ascii(name).replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30) || 'Programm';
+}
+
+function brickFiles(): BrickFiles | null {
+  if (!state.brick) {
+    log('Bitte zuerst einen EV3 verbinden.', 'error');
+    return null;
+  }
+  if (!state.brick.files) {
+    log('Der Simulator kann keine Programme speichern. Verbinde dafür einen echten EV3.', 'error');
+    return null;
+  }
+  return state.brick.files;
+}
+
+/**
+ * Translates the program for the EV3 and stores it there together with its blocks.
+ * Returns the program path, or null if that did not work (the reason is logged).
+ */
+export async function transferToEv3(): Promise<string | null> {
+  const files = brickFiles();
+  if (!files) return null;
+  save();
+  let image: Uint8Array;
+  try {
+    const result = compileRbf(workspace);
+    image = result.image;
+    for (const warning of result.warnings) log(warning);
+  } catch (e) {
+    const block = e instanceof RbfError && e.blockId ? workspace.getBlockById(e.blockId) : null;
+    if (block) {
+      block.select();
+      workspace.centerOnBlock(block.id);
+    }
+    log(`Übertragen nicht möglich: ${(e as Error).message}`, 'error');
+    return null;
+  }
+  const name = currentProject()?.name ?? 'Programm';
+  const folder = brickName(name);
+  const path = `../prjs/${folder}/${folder}.rbf`;
+  log(`Übertrage „${name}“ auf den EV3 …`);
+  try {
+    await files.write(path, image);
+    await files.write(`../prjs/${folder}/${SOURCE_FILE}`, new TextEncoder().encode(exportProject().json));
+  } catch (e) {
+    log(`Übertragen fehlgeschlagen: ${(e as Error).message}`, 'error');
+    return null;
+  }
+  log(`Auf dem EV3 gespeichert: Datei-Navigation → ${folder} → ${folder}`);
+  return path;
+}
+
+export async function startOnEv3(path: string): Promise<void> {
+  try {
+    await brickFiles()?.startProgram(path);
+    log('Das Programm läuft jetzt auf dem EV3. Stoppen mit der Zurück-Taste am Stein.');
+  } catch (e) {
+    log(`Starten fehlgeschlagen: ${(e as Error).message}`, 'error');
+  }
+}
+
+/** Folders on the brick that hold an OpenStorm program with its blocks. */
+export async function listOnEv3(): Promise<string[]> {
+  const files = brickFiles();
+  if (!files) return [];
+  const { folders } = await files.list('../prjs/');
+  const result: string[] = [];
+  for (const folder of folders) {
+    if ((await files.list(`../prjs/${folder}/`)).files.includes(SOURCE_FILE)) result.push(folder);
+  }
+  return result;
+}
+
+/** Opens the blocks stored on the brick as a project (replacing one of the same name if wanted). */
+export async function loadFromEv3(folder: string): Promise<void> {
+  const files = brickFiles();
+  if (!files) return;
+  const json = new TextDecoder().decode(await files.read(`../prjs/${folder}/${SOURCE_FILE}`));
+  const data = JSON.parse(json) as { app?: string; name?: string; workspace?: object };
+  if (data.app !== 'openstorm' || !data.workspace) throw new Error('Keine OpenStorm-Daten');
+  const name = data.name ?? folder;
+  const existing = listProjects().find((p) => p.name === name);
+  if (existing && confirm(`„${name}“ gibt es hier schon. Durch die Fassung vom EV3 ersetzen?`)) {
+    save();
+    storageSet(projectKey(existing.id), JSON.stringify(data.workspace));
+    currentId = '';
+    load(existing.id);
+  } else {
+    newProject(existing ? `${name} (vom EV3)` : name, data.workspace);
+  }
+  log(`„${name}“ vom EV3 geladen`);
 }
 
 export function initEditor(container: HTMLElement, onChange: () => void): void {
