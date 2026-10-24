@@ -338,7 +338,18 @@ export async function autoConnect(): Promise<void> {
   const quiet = el('p');
   try {
     const bridge = await WsBridge.open(url);
-    const s = await bridge.status();
+    let s = await bridge.status();
+    // Right after switching the Pi on, Bluetooth needs a moment.
+    for (let i = 0; s.bluetooth === false && i < 30; i++) {
+      if (i === 0) log('Brücke startet Bluetooth …');
+      await new Promise((r) => setTimeout(r, 2000));
+      s = await bridge.status();
+    }
+    if (s.bluetooth === false) {
+      bridge.close();
+      log(`Bluetooth der Brücke ist nicht bereit: ${s.error ?? 'unbekannter Fehler'}`, 'error');
+      return;
+    }
     if (!s.connected && !s.address) {
       bridge.close();
       log('Brücke bereit. Tippe oben rechts auf „Nicht verbunden“, um einen EV3 auszuwählen.');

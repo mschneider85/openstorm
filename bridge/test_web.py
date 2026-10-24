@@ -160,6 +160,31 @@ class WebTest(unittest.TestCase):
         finally:
             await client.close()
 
+    def test_errors_reach_only_the_asking_app(self):
+        asyncio.run(self._two_apps())
+
+    async def _two_apps(self):
+        class OfflineUpdater(FakeUpdater):
+            async def latest(self):
+                raise RuntimeError("Kein Internet")
+
+        tmp = tempfile.mkdtemp()
+        ob.STATE_FILE = os.path.join(tmp, "state.json")
+        bridge = ob.Bridge(bluez=FakeBluez(), link=FakeLink(), led=FakeLed(), updater=OfflineUpdater())
+        await bridge.start()
+        client = TestClient(TestServer(ob.make_web_app(bridge, tmp)))
+        await client.start_server()
+        try:
+            a, b = await client.ws_connect("/ws"), await client.ws_connect("/ws")
+            await a.send_str(json.dumps({"cmd": "update_check"}))
+            self.assertEqual(json.loads((await a.receive(timeout=2)).data)["event"], "error")
+            await b.send_str(json.dumps({"cmd": "status"}))
+            self.assertEqual(json.loads((await b.receive(timeout=2)).data)["event"], "status")
+            await a.close()
+            await b.close()
+        finally:
+            await client.close()
+
 
 if __name__ == "__main__":
     unittest.main()

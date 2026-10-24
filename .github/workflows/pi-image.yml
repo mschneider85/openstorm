@@ -11,6 +11,11 @@ on:
 permissions:
   contents: write
 
+# A newer push replaces a build still running, so two builds never publish at once.
+concurrency:
+  group: pi-image
+  cancel-in-progress: true
+
 jobs:
   image:
     runs-on: ubuntu-latest

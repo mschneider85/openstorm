@@ -10,6 +10,8 @@ import { log } from './console';
 
 const PROJECTS_KEY = 'openstorm.projects';
 const CURRENT_KEY = 'openstorm.current';
+/** Disabled reason used by Blockly.Events.disableOrphans. */
+const ORPHANED = 'ORPHANED_BLOCK';
 const projectKey = (id: string) => `openstorm.project.${id}`;
 
 interface ProjectMeta {
@@ -82,10 +84,11 @@ function load(id: string): void {
   try {
     workspace.clear();
     Blockly.serialization.workspaces.load(data, workspace);
+    greyOutOrphans();
   } finally {
     Blockly.Events.enable();
   }
-  workspace.scrollCenter();
+  scrollToStart();
   onProjectChange();
 }
 
@@ -161,6 +164,9 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
   else if (projects.length) load(projects[0].id);
   else newProject('Mein Roboter');
 
+  // Blocks not attached to a start block never run; greying them out shows that.
+  workspace.addChangeListener(Blockly.Events.disableOrphans);
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   workspace.addChangeListener((e) => {
     if (e.isUiEvent) return;
@@ -168,6 +174,19 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
     timer = setTimeout(save, 500);
   });
   window.addEventListener('pagehide', save);
+}
+
+/** Same as Blockly.Events.disableOrphans, which only reacts to changes, for a loaded program. */
+function greyOutOrphans(): void {
+  for (const block of workspace.getTopBlocks(false)) {
+    if (block.previousConnection || block.outputConnection) block.setDisabledReason(true, ORPHANED);
+  }
+}
+
+/** Shows the program from its top left corner, where the start block usually is. */
+function scrollToStart(): void {
+  const content = workspace.getMetricsManager().getContentMetrics();
+  workspace.scroll(-content.left + 40, -content.top + 40);
 }
 
 export function resizeEditor(): void {
@@ -189,6 +208,11 @@ export async function startProgram(): Promise<void> {
   const { code, threads } = compile(workspace);
   if (threads === 0) {
     log('Kein „Programmstart“-Block gefunden. Hänge deine Blöcke an einen Startblock.', 'error');
+    return;
+  }
+  const starts = workspace.getTopBlocks(false).filter((b) => b.type === 'ev3_start');
+  if (starts.every((b) => !b.getNextBlock())) {
+    log('Unter „Programmstart“ hängen noch keine Blöcke. Ziehe Blöcke aus der Liste links darunter.', 'error');
     return;
   }
   log(`Programm gestartet${threads > 1 ? ` (${threads} parallele Abläufe)` : ''}`);

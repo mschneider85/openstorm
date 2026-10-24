@@ -382,9 +382,10 @@ main {
   border-color: #d9483b;
 }
 
+/* Sensors 1–4 in the first row, motors A–D in the second, like on the brick. */
 .device-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -410,6 +411,7 @@ main {
 }
 
 .port-label {
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   width: 34px;
@@ -456,6 +458,18 @@ main {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.motor-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.motor-buttons .btn.ghost {
+  grid-column: 1 / -1;
+  min-height: 36px;
+  font-size: 14px;
 }
 
 .speed-row {
@@ -713,6 +727,10 @@ dialog::backdrop {
 }
 
 @media (max-width: 760px) {
+  .device-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .brand span,
   .project-btn {
     max-width: 120px;

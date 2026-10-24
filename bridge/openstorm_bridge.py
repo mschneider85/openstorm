@@ -543,11 +543,13 @@ class Bridge:
         except OSError as e:
             log.warning("Send to EV3 failed: %s", e)
 
-    async def command(self, line: str) -> None:
+    async def command(self, line: str, reply: Callable[[Dict], None]) -> None:
+        """Runs one command. Answers and errors go to the asking app only (`reply`),
+        so several apps (or two requests of one app) don't get each other's answers."""
         try:
             cmd = json.loads(line)
         except ValueError:
-            self._event({"event": "error", "message": "Ungültiger Befehl"})
+            reply({"event": "error", "message": "Ungültiger Befehl"})
             return
         name = cmd.get("cmd")
         log.info("Command: %s", name)
@@ -555,20 +557,20 @@ class Bridge:
             if name in ("scan", "connect") and self.bluetooth_error:
                 raise RuntimeError("Bluetooth der Brücke ist nicht bereit: " + self.bluetooth_error)
             if name == "status":
-                self._event(self._status())
+                reply(self._status())
             elif name == "scan":
                 async with self.busy:
                     devices = await self.bluez.scan()
-                self._event({"event": "devices", "devices": devices})
+                reply({"event": "devices", "devices": devices})
             elif name == "connect":
-                await self._connect(cmd.get("address") or self.state.get("address"))
+                await self._connect(cmd.get("address") or self.state.get("address"), reply)
             elif name == "disconnect":
                 self.link.close()
                 self.led.connected(False)
                 self._event({"event": "disconnected", "reason": "Getrennt"})
             elif name == "update_check":
                 current, latest = self.updater.current, (await self.updater.latest())["version"]
-                self._event({"event": "update_info", "current": current, "latest": latest,
+                reply({"event": "update_info", "current": current, "latest": latest,
                              "available": latest != current})
             elif name == "update":
                 async with self.busy:
@@ -578,18 +580,18 @@ class Bridge:
                 # Give the event a moment to reach the apps, then run the new version.
                 asyncio.get_event_loop().call_later(1, self.restart)
             else:
-                self._event({"event": "error", "message": "Unbekannter Befehl: {}".format(name)})
+                reply({"event": "error", "message": "Unbekannter Befehl: {}".format(name)})
         except Exception as e:  # report every failure to the app instead of dying
             log.exception("Command %s failed", name)
-            self._event({"event": "error", "message": str(e) or e.__class__.__name__})
+            reply({"event": "error", "message": str(e) or e.__class__.__name__})
 
-    async def _connect(self, address: Optional[str]) -> None:
+    async def _connect(self, address: Optional[str], reply: Callable[[Dict], None]) -> None:
         if not address:
-            self._event({"event": "error", "message": "Kein EV3 ausgewählt"})
+            reply({"event": "error", "message": "Kein EV3 ausgewählt"})
             return
         async with self.busy:
             if self.link.connected and self.state.get("address") == address:
-                self._event({"event": "connected", "address": address, "name": self.state.get("name")})
+                reply({"event": "connected", "address": address, "name": self.state.get("name")})
                 return
             self.link.close()
             await self.bluez.ensure_paired(address)
@@ -599,7 +601,7 @@ class Bridge:
             save_state(self.state)
         log.info("Connected to EV3 %s (%s)", name, address)
         self.led.connected(True)
-        self._event({"event": "connected", "address": address, "name": name})
+        reply({"event": "connected", "address": address, "name": name})
 
     def _status(self) -> Dict:
         return {
@@ -651,7 +653,7 @@ class BleFrontend:
             bytearray(), Perm.readable | Perm.writeable)
         await self.server.start()
         self.bridge.data_sinks.append(lambda data: self._notify(DATA_OUT_UUID, data))
-        self.bridge.event_sinks.append(lambda event: self._notify(CONTROL_UUID, encode_event(event)))
+        self.bridge.event_sinks.append(self._reply)
         log.info("Advertising as %s", BLE_NAME)
 
     def _on_write(self, characteristic, value: bytearray) -> None:
@@ -661,7 +663,10 @@ class BleFrontend:
             asyncio.ensure_future(self.bridge.to_ev3(bytes(value)))
         elif uuid == CONTROL_UUID:
             for line in self.control_in.push(bytes(value)):
-                asyncio.ensure_future(self.bridge.command(line))
+                asyncio.ensure_future(self.bridge.command(line, self._reply))
+
+    def _reply(self, event: Dict) -> None:
+        self._notify(CONTROL_UUID, encode_event(event))
 
     def _notify(self, uuid: str, data: bytes) -> None:
         characteristic = self.server.get_characteristic(uuid)
@@ -695,7 +700,7 @@ def make_web_app(bridge: Bridge, www_dir: str = WWW_DIR):
                 if msg.type == WSMsgType.BINARY:
                     await bridge.to_ev3(msg.data)
                 elif msg.type == WSMsgType.TEXT:
-                    asyncio.ensure_future(bridge.command(msg.data))
+                    asyncio.ensure_future(bridge.command(msg.data, send_event))
         finally:
             bridge.data_sinks.remove(send_data)
             bridge.event_sinks.remove(send_event)

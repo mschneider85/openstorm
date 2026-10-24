@@ -108,11 +108,11 @@ function motorControls(port: MotorPort): HTMLElement {
   speed.addEventListener('input', () => (speedLabel.textContent = `${speed.value} %`));
   const run = (dir: number) => act(state.brick?.motorStart([port], dir * Number(speed.value)));
   const stop = () => act(state.brick?.motorStop([port], true));
-  const row = el('div', 'row');
+  const row = el('div', 'motor-buttons');
   row.append(
     holdButton('◀ zurück', 'btn', () => run(-1), stop),
     holdButton('vor ▶', 'btn', () => run(1), stop),
-    button('0°', 'btn ghost', () => act(state.brick?.motorResetCount([port]))),
+    button('Zähler auf 0', 'btn ghost', () => act(state.brick?.motorResetCount([port]))),
   );
   const speedRow = el('label', 'speed-row');
   speedRow.append('Tempo', speed, speedLabel);
