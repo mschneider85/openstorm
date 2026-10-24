@@ -11,11 +11,16 @@ Programme laufen in der App und steuern den EV3 live per Bluetooth über *Direct
 ## So funktioniert es
 
 ```
-iPad (Bluefy-Browser)  ──BLE──▶  Raspberry Pi Zero W  ──Bluetooth──▶  EV3
-       OpenStorm-Web-App           „OpenStorm-Brücke“
+iPad (Safari)  ──WLAN──▶  Raspberry Pi Zero W  ──Bluetooth──▶  EV3
+                          „OpenStorm-Brücke“
+                          liefert auch die App aus
 ```
 
-Safari auf dem iPad kann kein Bluetooth. Die kostenlose App **Bluefy** aus dem App Store kann es, allerdings nur Bluetooth LE. Der EV3 spricht nur das ältere Bluetooth Classic. Ein Raspberry Pi Zero W übersetzt zwischen beiden.
+Safari auf dem iPad kann kein Bluetooth, und der EV3 spricht nur Bluetooth Classic. Ein Raspberry Pi Zero W sitzt dazwischen:
+- Er stellt die App unter **http://openstorm.local** bereit.
+- Er leitet die Befehle per Bluetooth an den EV3 weiter.
+
+Auf dem iPad muss **keine App installiert** werden.
 
 ## Einrichtung
 
@@ -25,11 +30,20 @@ Safari auf dem iPad kann kein Bluetooth. Die kostenlose App **Bluefy** aus dem A
    **https://github.com/mschneider85/openstorm/releases/download/pi-image/openstorm-pi.img.xz**
 2. Den [Raspberry Pi Imager](https://www.raspberrypi.com/software/) öffnen und unter *Gerät* „Raspberry Pi Zero“ wählen.
 3. Unter *Betriebssystem* ganz unten **„Eigenes Image“** wählen und die heruntergeladene Datei angeben. Entpacken ist nicht nötig.
-4. Die SD-Karte wählen und schreiben. Die Frage nach „OS-Anpassungen“ mit *Nein* beantworten.
-5. Die SD-Karte in den Pi stecken und Strom anschließen, über eine Powerbank oder den USB-Port des EV3.
-   Nach etwa 40 Sekunden ist die Brücke bereit. Sie braucht kein WLAN.
+4. SD-Karte wählen. Bei der Frage nach **„OS-Anpassungen“**:
+   - **Mit Heim-WLAN (empfohlen):** *Einstellungen bearbeiten* → WLAN-Name, Passwort und Land eintragen.
+     Das iPad bleibt dann in deinem normalen WLAN.
+   - **Ohne:** *Nein*. Der Pi öffnet dann sein eigenes WLAN **„OpenStorm“** (Passwort `openstorm`).
+     Während das iPad damit verbunden ist, hat es kein Internet.
+5. SD-Karte in den Pi stecken und Strom anschließen, über eine Powerbank oder den USB-Port des EV3.
+   Nach etwa 40–60 Sekunden ist die Brücke bereit.
+   Findet der Pi das eingetragene Heim-WLAN nicht, öffnet er automatisch sein eigenes.
 
-Wartungs-Login für Tastatur und Bildschirm: Benutzer `openstorm`, Passwort `openstorm`.
+**Die grüne Leuchte am Pi:**
+- **langsames Blinken:** bereit, aber kein EV3 verbunden
+- **Dauerlicht:** mit dem EV3 verbunden
+
+Wartungs-Login: Benutzer `openstorm`, Passwort `openstorm`, sofern im Imager nichts anderes eingestellt wurde.
 
 ### 2. EV3 einstellen (einmalig)
 
@@ -38,26 +52,33 @@ Wartungs-Login für Tastatur und Bildschirm: Benutzer `openstorm`, Passwort `ope
 - **Sichtbarkeit** an
 - **iPhone/iPad/iPod** aus
 
+Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernimmt der Pi.
+
 ### 3. iPad (einmalig)
 
-1. **[Bluefy – Web BLE Browser](https://apps.apple.com/app/id1492822055)** aus dem App Store installieren.
-2. In Bluefy diese Adresse öffnen: **https://mschneider85.github.io/openstorm/**
-3. Ein Lesezeichen setzen, damit die Seite beim nächsten Mal mit einem Tipp da ist.
+1. In **Safari** **http://openstorm.local** öffnen.
+   - Mit dem eigenen WLAN des Pi geht auch **http://10.42.0.1**.
+2. *Teilen* (□↑) → **„Zum Home-Bildschirm“**. OpenStorm hat dann ein eigenes Symbol und startet im Vollbild.
 
 ### 4. Verbinden
 
-1. In OpenStorm oben rechts auf **„Nicht verbunden“** tippen und dann **„Brücke suchen …“**.
-2. Im Bluefy-Fenster **„OpenStorm“** auswählen.
-3. **Beim ersten Mal:** Die Brücke sucht EV3-Steine in der Nähe. Deinen EV3 auswählen, dann fragt der EV3 nach dem Code `1234` – bestätigen.
-4. **Ab dem zweiten Mal** verbindet die Brücke automatisch mit dem zuletzt benutzten EV3.
+- **Beim ersten Mal:**
+  1. Oben rechts auf **„Nicht verbunden“** tippen, dann auf **„Verbinden“**.
+  2. Die Brücke sucht EV3-Steine in der Nähe. Deinen EV3 auswählen.
+  3. Der EV3 fragt nach dem Code `1234` – bestätigen.
+- **Danach** verbindet sich OpenStorm beim Öffnen **automatisch** mit diesem EV3.
+- Im Verbindungsdialog steht, ob die Brücke erreichbar und der EV3 verbunden ist.
 
-Updates der App kommen automatisch, sobald neuer Code auf GitHub liegt.
+**Hinweise:**
+- Projekte werden im Browser gespeichert, und zwar getrennt für jede Adresse. Nutze darum immer dieselbe Adresse, also `openstorm.local`.
+- Neue Versionen der App kommen mit einem neuen Pi-Image auf den Pi.
 
 ## Weitere Verbindungswege
 
 | Gerät | Verbindung |
 |---|---|
-| iPad mit Bluefy | über die Pi-Brücke (siehe oben) |
+| iPad mit Safari | über die Pi-Brücke per WLAN (siehe oben) |
+| iPad mit [Bluefy](https://apps.apple.com/de/app/id1492822055) | über die Pi-Brücke per Bluetooth LE: https://mschneider85.github.io/openstorm/ |
 | PC/Mac mit Chrome oder Edge | über die Pi-Brücke (Web Bluetooth) oder direkt über den Bluetooth-COM-Port des gekoppelten EV3 (Web Serial) |
 | Jeder Browser | Simulator |
 | iPad mit selbst installierter App | natives Bluetooth-Plugin (siehe unten) |
@@ -80,7 +101,7 @@ npm test        # Protokoll-, Brücken-, Simulator- und Programmtests
 npm run build   # Web-App nach app/dist
 
 cd ../bridge
-python3 -m unittest -v   # Tests der Pi-Brücke
+python3 -m unittest -v   # Tests der Pi-Brücke (test_web braucht aiohttp)
 ```
 
 Bei jedem Push auf `main` baut GitHub automatisch:
@@ -88,7 +109,7 @@ Bei jedem Push auf `main` baut GitHub automatisch:
 | Workflow | Ergebnis |
 |---|---|
 | `pages.yml` | Web-App auf https://mschneider85.github.io/openstorm/ |
-| `pi-image.yml` | SD-Karten-Image als Release `pi-image` (nur bei Änderungen in `bridge/`) |
+| `pi-image.yml` | SD-Karten-Image inkl. Web-App als Release `pi-image` |
 | `ios.yml` | iPad-App als neuestes Release (nur bei Änderungen in `app/`) |
 
 Die Brücke lässt sich auch auf einem vorhandenen Raspberry Pi OS installieren: `sudo sh bridge/install-pi.sh`.
@@ -106,7 +127,9 @@ app/
   ios/App/App/      Xcode-Projekt; EV3Plugin.swift ist das Bluetooth-Plugin
   test/             Vitest-Tests
 bridge/
-  openstorm_bridge.py      BLE-Dienst (iPad) ⇄ RFCOMM (EV3), koppelt den EV3 mit PIN 1234
+  openstorm_bridge.py      Webserver + WebSocket (WLAN) und BLE-Dienst ⇄ RFCOMM (EV3),
+                           koppelt den EV3 mit PIN 1234, steuert die Status-Leuchte
+  OpenStorm-Hotspot.nmconnection   eigenes WLAN, falls kein Heim-WLAN eingerichtet ist
   install-pi.sh            Installation auf Raspberry Pi OS (auch für den Image-Build)
 ```
 

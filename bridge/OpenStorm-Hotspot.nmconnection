@@ -1,0 +1,25 @@
+[connection]
+id=OpenStorm-Hotspot
+type=wifi
+autoconnect=true
+# Lower than networks set up in the Raspberry Pi Imager (priority 0), so it is only a fallback.
+autoconnect-priority=-10
+
+[wifi]
+mode=ap
+ssid=OpenStorm
+band=bg
+
+[wifi-security]
+key-mgmt=wpa-psk
+proto=rsn
+pairwise=ccmp
+group=ccmp
+psk=openstorm
+
+[ipv4]
+method=shared
+address1=10.42.0.1/24
+
+[ipv6]
+method=ignore

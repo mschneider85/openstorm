@@ -5,7 +5,7 @@ name: Raspberry-Pi-Image bauen
 on:
   push:
     branches: [main]
-    paths: ['bridge/**', '.github/workflows/pi-image.yml']
+    paths: ['bridge/**', 'app/**', '.github/workflows/pi-image.yml']
   workflow_dispatch:
 
 permissions:
@@ -17,9 +17,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Brücke testen
         working-directory: bridge
-        run: python3 -m unittest -v
+        run: |
+          pip install aiohttp
+          python -m unittest -v
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      # The Pi serves the app itself on http://openstorm.local/ (base path "/").
+      - name: Web-App für den Pi bauen
+        working-directory: app
+        run: |
+          npm ci
+          npm run build
+          cp -r dist ../bridge/www
 
       - name: Image bauen
         id: build

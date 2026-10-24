@@ -5,13 +5,30 @@ set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
 
 apt-get update
-apt-get install -y --no-install-recommends bluez python3-pip python3-dbus-next
+apt-get install -y --no-install-recommends bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon
 pip3 install --break-system-packages --no-cache-dir bless==0.3.0
 
 install -d /opt/openstorm
 install -m 755 "$DIR/openstorm_bridge.py" /opt/openstorm/
 install -m 644 "$DIR/openstorm-bridge.service" /etc/systemd/system/
 systemctl enable openstorm-bridge.service
+
+# The web app (built with base "/"), served on http://openstorm.local/
+if [ -d "$DIR/www" ]; then
+  rm -rf /opt/openstorm/www
+  cp -r "$DIR/www" /opt/openstorm/www
+fi
+
+# WLAN: a network configured in the Raspberry Pi Imager wins; without it the Pi
+# opens its own network "OpenStorm" (password: openstorm).
+install -d -m 700 /etc/NetworkManager/system-connections
+install -m 600 "$DIR/OpenStorm-Hotspot.nmconnection" /etc/NetworkManager/system-connections/
+# WLAN stays blocked until a country is set; the bridge unblocks it (see service).
+for cmdline in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+  if [ -f "$cmdline" ] && ! grep -q ieee80211_regdom "$cmdline"; then
+    sed -i '1 s/$/ cfg80211.ieee80211_regdom=DE/' "$cmdline"
+  fi
+done
 
 # Bluetooth name shown to the EV3 and to other devices.
 echo "PRETTY_HOSTNAME=OpenStorm" > /etc/machine-info
