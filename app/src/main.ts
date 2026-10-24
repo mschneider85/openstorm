@@ -2,7 +2,7 @@ import { Capacitor } from '@capacitor/core';
 import './styles.css';
 import { state } from './state';
 import { clearLog } from './ui/console';
-import { initConnect, openConnectDialog } from './ui/connect';
+import { autoConnect, initConnect, openConnectDialog } from './ui/connect';
 import { initDevices, setDevicesVisible } from './ui/devices';
 import { currentProject, initEditor, resizeEditor, startProgram, stopProgram } from './ui/editor';
 import { initProjects, openProjectsDialog } from './ui/projects';
@@ -55,6 +55,7 @@ state.subscribe(() => {
 });
 
 window.addEventListener('resize', resizeEditor);
+void autoConnect();
 
 // Offline support for the browser version; the iOS app ships its files itself.
 if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator && import.meta.env.PROD) {

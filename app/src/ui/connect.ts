@@ -1,6 +1,6 @@
 import { Ev3Brick } from '../ev3/ev3brick';
 import { SimBrick } from '../ev3/simbrick';
-import { BleBridge, webBluetoothAvailable, type Ev3Device } from '../transport/blebridge';
+import { BleBridge, WsBridge, bridgeUrlFromPage, webBluetoothAvailable, type BridgeConnection, type Ev3Device } from '../transport/bridge';
 import { IosTransport, iosBluetoothAvailable, listPairedBricks, pairBrick } from '../transport/ios';
 import { SerialTransport, serialAvailable } from '../transport/serial';
 import type { Transport } from '../transport/transport';
@@ -10,7 +10,7 @@ import { log } from './console';
 let dialog: HTMLDialogElement;
 let body: HTMLElement;
 /** A bridge connected in the dialog but not (yet) used for a brick. */
-let pendingBridge: BleBridge | null = null;
+let pendingBridge: BridgeConnection | null = null;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -88,27 +88,37 @@ async function iosSection(): Promise<HTMLElement> {
   );
 }
 
-function bridgeSection(): HTMLElement {
+/** Uses a bridge that holds an EV3 connection as the current brick. */
+async function useBridge(bridge: BridgeConnection, status: HTMLElement): Promise<void> {
+  pendingBridge = null;
+  await connectWith('bridge', async () => bridge, status);
+}
+
+function describe(s: { connected: boolean; name: string | null }): string {
+  if (s.connected) return `Brücke ✓ · EV3 „${s.name}“ verbunden ✓`;
+  if (s.name) return `Brücke ✓ · EV3 „${s.name}“ nicht verbunden (aus oder außer Reichweite?)`;
+  return 'Brücke ✓ · noch kein EV3 gekoppelt';
+}
+
+/**
+ * Connects through the bridge: if the bridge already holds an EV3 connection it
+ * is used, else the last brick is tried, else nearby bricks are listed.
+ */
+function bridgeSection(title: string, buttonLabel: string, open: () => Promise<BridgeConnection>, tips: string[]): HTMLElement {
   const status = el('p', 'status');
   const list = el('div', 'device-list');
-  const find = el('button', 'btn primary', 'Brücke suchen …');
+  const button = el('button', 'btn primary', buttonLabel);
 
-  const useBridge = (bridge: BleBridge) =>
-    connectWith('bridge', async () => {
-      pendingBridge = null;
-      return bridge;
-    }, status);
-
-  const connectEv3 = async (bridge: BleBridge, device?: Ev3Device) => {
+  const connectEv3 = async (bridge: BridgeConnection, device?: Ev3Device) => {
     list.replaceChildren();
     status.textContent = device
-      ? `Verbinde mit ${device.name} … Beim ersten Mal die Kopplung am EV3 bestätigen.`
+      ? `Verbinde mit ${device.name} … Beim ersten Mal die Kopplung am EV3 bestätigen (1234).`
       : 'Verbinde mit dem zuletzt benutzten EV3 …';
     await bridge.connectEv3(device?.address);
-    await useBridge(bridge);
+    await useBridge(bridge, status);
   };
 
-  const showScan = async (bridge: BleBridge) => {
+  const showScan = async (bridge: BridgeConnection) => {
     list.replaceChildren();
     status.textContent = 'Suche EV3 in der Nähe (ca. 10 Sekunden) …';
     const devices = await bridge.scan();
@@ -125,15 +135,15 @@ function bridgeSection(): HTMLElement {
     list.append(again);
   };
 
-  find.addEventListener('click', async () => {
+  button.addEventListener('click', async () => {
     try {
       pendingBridge?.close();
-      status.textContent = 'Wähle die Brücke „OpenStorm“ aus …';
-      const bridge = await BleBridge.request();
+      status.textContent = 'Verbinde mit der Brücke …';
+      const bridge = await open();
       pendingBridge = bridge;
-      status.textContent = 'Brücke verbunden.';
       const s = await bridge.status();
-      if (s.connected) return await useBridge(bridge);
+      status.textContent = describe(s);
+      if (s.connected) return await useBridge(bridge, status);
       if (s.address) {
         try {
           return await connectEv3(bridge);
@@ -148,17 +158,19 @@ function bridgeSection(): HTMLElement {
     }
   });
 
-  return section(
-    'EV3 über die OpenStorm-Brücke',
-    find,
-    status,
-    list,
-    hints(
-      'Brücke (Raspberry Pi) einschalten und ca. 40 Sekunden warten.',
-      'Am EV3: Bluetooth und Sichtbarkeit an, „iPhone/iPad/iPod“ aus.',
-      'Beim ersten Verbinden fragt der EV3 nach dem Code 1234 – bestätigen.',
-    ),
-  );
+  return section(title, button, status, list, hints(...tips));
+}
+
+/** Shows whether the bridge and its EV3 are connected, without changing anything. */
+async function showBridgeStatus(url: string, target: HTMLElement): Promise<void> {
+  target.textContent = 'Prüfe Brücke …';
+  try {
+    const bridge = await WsBridge.open(url);
+    target.textContent = describe(await bridge.status());
+    bridge.close();
+  } catch {
+    target.textContent = 'Brücke nicht erreichbar';
+  }
 }
 
 function serialSection(): HTMLElement {
@@ -186,18 +198,36 @@ async function fillDialog(): Promise<void> {
       log('Verbindung getrennt');
       dialog.close();
     });
-    body.append(section(`Verbunden: ${state.brick.name}`, disconnect));
+    const via = state.kind === 'bridge' ? ' (über die Brücke)' : '';
+    body.append(section(`Verbunden: ${state.brick.name}${via}`, disconnect));
   }
 
-  if (webBluetoothAvailable() && !iosBluetoothAvailable()) body.append(bridgeSection());
+  const bridgeUrl = bridgeUrlFromPage();
+  if (bridgeUrl) {
+    const wlan = bridgeSection('EV3 über die Brücke (WLAN)', 'Verbinden', () => WsBridge.open(bridgeUrl), [
+      'Am EV3: Bluetooth und Sichtbarkeit an, „iPhone/iPad/iPod“ aus.',
+      'Beim ersten Verbinden fragt der EV3 nach dem Code 1234 – bestätigen.',
+      'Leuchte am Pi: Dauerlicht = mit EV3 verbunden, langsames Blinken = wartet.',
+    ]);
+    if (state.kind !== 'bridge') void showBridgeStatus(bridgeUrl, wlan.querySelector('.status')!);
+    body.append(wlan);
+  }
+  if (webBluetoothAvailable() && !iosBluetoothAvailable()) {
+    body.append(
+      bridgeSection('EV3 über die Brücke (Bluetooth)', 'Brücke suchen …', () => BleBridge.request(), [
+        'Brücke (Raspberry Pi) einschalten und ca. 40 Sekunden warten.',
+        'Am EV3: Bluetooth und Sichtbarkeit an, „iPhone/iPad/iPod“ aus.',
+        'Beim ersten Verbinden fragt der EV3 nach dem Code 1234 – bestätigen.',
+      ]),
+    );
+  }
   if (iosBluetoothAvailable()) body.append(await iosSection());
   if (serialAvailable()) body.append(serialSection());
-  if (!iosBluetoothAvailable() && !serialAvailable() && !webBluetoothAvailable()) {
+  if (!bridgeUrl && !iosBluetoothAvailable() && !serialAvailable() && !webBluetoothAvailable()) {
     const p = el('p', 'muted');
     p.innerHTML =
-      'Dieser Browser kann kein Bluetooth. Öffne OpenStorm auf dem iPad in der kostenlosen App ' +
-      '<a href="https://apps.apple.com/app/id1492822055" target="_blank" rel="noopener">Bluefy</a>, ' +
-      'am Computer in Chrome oder Edge.';
+      'Dieser Browser kann kein Bluetooth. Mit der OpenStorm-Brücke öffnest du die App im selben WLAN unter ' +
+      '<a href="http://openstorm.local/">http://openstorm.local</a> – dann klappt es auch in Safari.';
     body.append(section('Echter EV3', p));
   }
 
@@ -218,6 +248,32 @@ export function initConnect(d: HTMLDialogElement): void {
     pendingBridge?.close();
     pendingBridge = null;
   });
+}
+
+/**
+ * When the app was loaded from the bridge, connect right away – to the EV3 the
+ * bridge holds or used last. Nothing happens if no EV3 is known yet.
+ */
+export async function autoConnect(): Promise<void> {
+  const url = bridgeUrlFromPage();
+  if (!url || state.brick) return;
+  const quiet = el('p');
+  try {
+    const bridge = await WsBridge.open(url);
+    const s = await bridge.status();
+    if (!s.connected && !s.address) {
+      bridge.close();
+      log('Brücke bereit. Tippe oben rechts auf „Nicht verbunden“, um einen EV3 auszuwählen.');
+      return;
+    }
+    if (!s.connected) {
+      log(`Verbinde mit EV3 „${s.name}“ …`);
+      await bridge.connectEv3();
+    }
+    await useBridge(bridge, quiet);
+  } catch (e) {
+    log(`Automatisches Verbinden fehlgeschlagen: ${(e as Error).message}`, 'error');
+  }
 }
 
 export function openConnectDialog(): void {

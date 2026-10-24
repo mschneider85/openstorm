@@ -4,3 +4,4 @@ dev-dist/
 *.ipa
 .DS_Store
 __pycache__/
+bridge/www/

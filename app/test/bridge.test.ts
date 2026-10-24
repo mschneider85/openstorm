@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { BleBridge as BleBridgeType } from '../src/transport/blebridge';
+import type { BleBridge as BleBridgeType } from '../src/transport/bridge';
 import type { Ev3Brick as Ev3BrickType } from '../src/ev3/ev3brick';
 
 const SERVICE = '5e3d0001-8b6f-4c1e-9a3f-0e7d3c2b1a00';
@@ -102,7 +102,7 @@ beforeAll(async () => {
     value: { requestDevice: async () => fake.device },
     configurable: true,
   });
-  ({ BleBridge } = await import('../src/transport/blebridge'));
+  ({ BleBridge } = await import('../src/transport/bridge'));
   ({ Ev3Brick } = await import('../src/ev3/ev3brick'));
 });
 
