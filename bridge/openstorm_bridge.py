@@ -23,15 +23,28 @@ Control commands (app -> bridge):    Events (bridge -> app):
   {"cmd": "scan"}                      {"event": "devices", "devices": [...]}
   {"cmd": "connect", "address"?: str}  {"event": "connected", "address", "name"}
   {"cmd": "disconnect"}                {"event": "disconnected", "reason": str}
+  {"cmd": "update_check"}              {"event": "update_info", "current": str,
+                                         "latest": str, "available": bool}
+  {"cmd": "update"}                    {"event": "updating", "version": str},
+                                         then the bridge restarts itself
                                        {"event": "error", "message": str}
+
+Updates come from the GitHub release "pi-update": version.json names the
+version and the SHA-256 of openstorm-update.tar.gz (this script, VERSION, www/).
 """
 
 import asyncio
+import hashlib
+import io
 import json
 import logging
 import os
+import py_compile
+import shutil
 import socket
 import subprocess
+import sys
+import tarfile
 from typing import Callable, Dict, List, Optional
 
 SERVICE_UUID = "5e3d0001-8b6f-4c1e-9a3f-0e7d3c2b1a00"
@@ -49,12 +62,53 @@ WWW_DIR = os.environ.get("OPENSTORM_WWW", "/opt/openstorm/www")
 HTTP_PORT = int(os.environ.get("OPENSTORM_HTTP_PORT", "80"))
 BLE_ENABLED = os.environ.get("OPENSTORM_BLE", "1") != "0"
 BLUETOOTH_RETRY_SECONDS = 5
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+UPDATE_URL = os.environ.get(
+    "OPENSTORM_UPDATE_URL", "https://github.com/mschneider85/openstorm/releases/download/pi-update/")
 ADAPTER_PATH = "/org/bluez/hci0"
 
 log = logging.getLogger("openstorm")
 
 
 # --- Pure helpers (unit tested) -----------------------------------------------
+
+
+def read_version(app_dir: str = APP_DIR) -> str:
+    try:
+        with open(os.path.join(app_dir, "VERSION")) as f:
+            return f.read().strip() or "dev"
+    except OSError:
+        return "dev"
+
+
+def install_bundle(data: bytes, sha256: str, app_dir: str = APP_DIR) -> None:
+    """Checks an update bundle and replaces the bridge script, VERSION and www/ with it."""
+    if hashlib.sha256(data).hexdigest() != sha256:
+        raise ValueError("Update beschädigt (Prüfsumme falsch), bitte nochmal versuchen")
+    new = os.path.join(app_dir, ".update")
+    shutil.rmtree(new, ignore_errors=True)
+    os.makedirs(new)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(new, filter="data")
+            else:  # Python < 3.12 without the security backport
+                tar.extractall(new)
+        script = os.path.join(new, "openstorm_bridge.py")
+        if not os.path.isfile(script) or not os.path.isfile(os.path.join(new, "www", "index.html")):
+            raise ValueError("Update unvollständig")
+        py_compile.compile(script, doraise=True)
+
+        www, old_www = os.path.join(app_dir, "www"), os.path.join(app_dir, "www.old")
+        shutil.rmtree(old_www, ignore_errors=True)
+        if os.path.isdir(www):
+            os.rename(www, old_www)
+        os.rename(os.path.join(new, "www"), www)
+        os.replace(script, os.path.join(app_dir, "openstorm_bridge.py"))
+        os.replace(os.path.join(new, "VERSION"), os.path.join(app_dir, "VERSION"))
+        shutil.rmtree(old_www, ignore_errors=True)
+    finally:
+        shutil.rmtree(new, ignore_errors=True)
 
 
 def chunks(data: bytes, size: int = CHUNK) -> List[bytes]:
@@ -333,6 +387,48 @@ class StatusLed:
 # --- The bridge ---------------------------------------------------------------
 
 
+class Updater:
+    """Fetches new versions of the bridge and the app from GitHub."""
+
+    def __init__(self, url: str = UPDATE_URL, app_dir: str = APP_DIR) -> None:
+        self.url = url
+        self.app_dir = app_dir
+
+    @property
+    def current(self) -> str:
+        return read_version(self.app_dir)
+
+    async def _get(self, name: str) -> bytes:
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120)) as session:
+                async with session.get(self.url + name) as response:
+                    response.raise_for_status()
+                    return await response.read()
+        except (aiohttp.ClientConnectionError, asyncio.TimeoutError) as e:
+            log.warning("Update server not reachable: %s", e)
+            raise RuntimeError("Kein Internet: Für Updates muss der Pi im Heim-WLAN sein") from e
+        except aiohttp.ClientResponseError as e:
+            raise RuntimeError("Update-Server antwortet nicht ({})".format(e.status)) from e
+
+    async def latest(self) -> Dict:
+        return json.loads(await self._get("version.json"))
+
+    async def install(self) -> str:
+        info = await self.latest()
+        data = await self._get("openstorm-update.tar.gz")
+        install_bundle(data, info["sha256"], self.app_dir)
+        log.info("Installed version %s", info["version"])
+        return info["version"]
+
+
+def restart() -> None:
+    """Starts the (updated) bridge script anew in this process."""
+    script = os.path.join(APP_DIR, "openstorm_bridge.py")
+    os.execv(sys.executable, [sys.executable, script])
+
+
 class Bridge:
     """Shares one EV3 connection between all connected apps (BLE and WLAN).
 
@@ -340,8 +436,11 @@ class Bridge:
     picks the replies it is waiting for.
     """
 
-    def __init__(self, bluez=None, link: Optional[Ev3Link] = None, led: Optional[StatusLed] = None) -> None:
+    def __init__(self, bluez=None, link: Optional[Ev3Link] = None, led: Optional[StatusLed] = None,
+                 updater: Optional[Updater] = None, restart: Callable[[], None] = restart) -> None:
         self.state = load_state()
+        self.updater = updater or Updater()
+        self.restart = restart
         self.led = led or StatusLed()
         self.bluez = bluez or Bluez()
         self.link = link or Ev3Link(self._from_ev3, self._ev3_closed)
@@ -397,6 +496,17 @@ class Bridge:
                 self.link.close()
                 self.led.connected(False)
                 self._event({"event": "disconnected", "reason": "Getrennt"})
+            elif name == "update_check":
+                current, latest = self.updater.current, (await self.updater.latest())["version"]
+                self._event({"event": "update_info", "current": current, "latest": latest,
+                             "available": latest != current})
+            elif name == "update":
+                async with self.busy:
+                    version = await self.updater.install()
+                self._event({"event": "updating", "version": version})
+                self.link.close()
+                # Give the event a moment to reach the apps, then run the new version.
+                asyncio.get_event_loop().call_later(1, self.restart)
             else:
                 self._event({"event": "error", "message": "Unbekannter Befehl: {}".format(name)})
         except Exception as e:  # report every failure to the app instead of dying
@@ -429,6 +539,7 @@ class Bridge:
             "name": self.state.get("name"),
             "bluetooth": self.bluetooth_error is None,
             "error": self.bluetooth_error,
+            "version": self.updater.current,
         }
 
     # bridge -> apps

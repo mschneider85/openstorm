@@ -25,13 +25,17 @@ export type BridgeEvent =
       /** Missing on older bridges. */
       bluetooth?: boolean;
       error?: string | null;
+      version?: string;
     }
   | { event: 'devices'; devices: Ev3Device[] }
   | { event: 'connected'; address: string; name: string }
   | { event: 'disconnected'; reason: string }
+  | { event: 'update_info'; current: string; latest: string; available: boolean }
+  | { event: 'updating'; version: string }
   | { event: 'error'; message: string };
 
 export type BridgeStatus = Extract<BridgeEvent, { event: 'status' }>;
+export type UpdateInfo = Extract<BridgeEvent, { event: 'update_info' }>;
 
 /**
  * Connection to the OpenStorm bridge (Raspberry Pi), which forwards the byte
@@ -60,6 +64,16 @@ export abstract class BridgeConnection implements Transport {
   async connectEv3(address?: string): Promise<string> {
     // Pairing a new brick waits for the confirmation on the EV3, so allow plenty of time.
     return (await this.request({ cmd: 'connect', address }, 'connected', 60000)).name;
+  }
+
+  /** Asks the bridge whether GitHub has a newer version (needs internet on the Pi). */
+  checkUpdate(): Promise<UpdateInfo> {
+    return this.request({ cmd: 'update_check' }, 'update_info', 30000);
+  }
+
+  /** Installs the newest version; the bridge restarts itself afterwards. */
+  async update(): Promise<string> {
+    return (await this.request({ cmd: 'update' }, 'updating', 180000)).version;
   }
 
   private request<K extends BridgeEvent['event']>(
