@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><clipPath id="brick"><rect x="136" y="72" width="240" height="368" rx="36"/></clipPath></defs>
+  <rect width="512" height="512" rx="112" fill="#1f2a36"/>
+  <g clip-path="url(#brick)">
+    <rect x="136" y="72" width="240" height="368" fill="#e9edf1"/>
+    <rect x="136" y="404" width="240" height="36" fill="#f29b30"/>
+  </g>
+  <rect x="168" y="108" width="176" height="120" rx="10" fill="#9fc5a8"/>
+  <path d="M196 196 l36 -44 l28 30 l40 -52" fill="none" stroke="#1f2a36" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="241" y="252" width="30" height="20" rx="6" fill="#b5bec7"/>
+  <rect x="166" y="306" width="30" height="28" rx="6" fill="#b5bec7"/>
+  <circle cx="256" cy="320" r="40" fill="#3fa34d"/>
+  <rect x="316" y="306" width="30" height="28" rx="6" fill="#b5bec7"/>
+  <rect x="241" y="368" width="30" height="20" rx="6" fill="#b5bec7"/>
+</svg>
