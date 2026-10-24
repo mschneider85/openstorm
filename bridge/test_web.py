@@ -28,6 +28,18 @@ class FakeBluez:
         return "Robo"
 
 
+class FlakyBluez(FakeBluez):
+    """Bluetooth that only comes up on the second try (e.g. still blocked at boot)."""
+
+    def __init__(self):
+        self.attempts = 0
+
+    async def start(self):
+        self.attempts += 1
+        if self.attempts == 1:
+            raise RuntimeError("Blocked through rfkill")
+
+
 class FakeLink:
     """Echoes every byte back, like an EV3 that answers instantly."""
 
@@ -95,6 +107,36 @@ class WebTest(unittest.TestCase):
             bridge._ev3_closed("aus")
             self.assertEqual(json.loads((await ws.receive(timeout=2)).data)["event"], "disconnected")
             self.assertEqual(led.states[-1], False)
+            await ws.close()
+        finally:
+            await client.close()
+
+    def test_app_is_served_while_bluetooth_is_down(self):
+        asyncio.run(self._bluetooth_down())
+
+    async def _bluetooth_down(self):
+        tmp = tempfile.mkdtemp()
+        ob.STATE_FILE = os.path.join(tmp, "state.json")
+        ob.BLUETOOTH_RETRY_SECONDS = 0.05
+        with open(os.path.join(tmp, "index.html"), "w") as f:
+            f.write("<title>OpenStorm</title>")
+        bridge = ob.Bridge(bluez=FlakyBluez(), link=FakeLink(), led=FakeLed())
+        client = TestClient(TestServer(ob.make_web_app(bridge, tmp)))
+        await client.start_server()
+        try:
+            ws = await client.ws_connect("/ws")
+
+            async def ask(cmd):
+                await ws.send_str(json.dumps(cmd))
+                return json.loads((await ws.receive(timeout=2)).data)
+
+            status = await ask({"cmd": "status"})
+            self.assertEqual(status["bluetooth"], False)
+            self.assertEqual((await ask({"cmd": "scan"}))["event"], "error")
+
+            await asyncio.wait_for(bridge.start(), 2)
+            self.assertEqual((await ask({"cmd": "status"}))["bluetooth"], True)
+            self.assertEqual((await ask({"cmd": "scan"}))["event"], "devices")
             await ws.close()
         finally:
             await client.close()

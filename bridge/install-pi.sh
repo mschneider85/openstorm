@@ -5,7 +5,7 @@ set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
 
 apt-get update
-apt-get install -y --no-install-recommends bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon
+apt-get install -y --no-install-recommends bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon rfkill openssh-server
 pip3 install --break-system-packages --no-cache-dir bless==0.3.0
 
 install -d /opt/openstorm
