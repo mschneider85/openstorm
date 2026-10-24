@@ -44,7 +44,7 @@ $('#console-toggle').addEventListener('click', () => {
   setTimeout(resizeEditor, 220);
 });
 
-const LABELS = { none: 'Nicht verbunden', sim: 'Simulator', ios: '', serial: '' };
+const LABELS = { none: 'Nicht verbunden', sim: 'Simulator', ios: '', serial: '', bridge: '' };
 state.subscribe(() => {
   const btn = $('#connect-btn');
   btn.dataset.kind = state.kind;

@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenStorm Bruecke (iPad per BLE <-> EV3 per Bluetooth)
+After=bluetooth.service
+Requires=bluetooth.service
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/openstorm/openstorm_bridge.py
+Environment=PYTHONUNBUFFERED=1
+StateDirectory=openstorm
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -154,6 +154,7 @@ button:disabled {
 }
 
 .conn[data-kind='ios'] .dot,
+.conn[data-kind='bridge'] .dot,
 .conn[data-kind='serial'] .dot {
   background: #4cd964;
   box-shadow: 0 0 8px #4cd964;
