@@ -73,7 +73,8 @@ Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernim
 
 **Hinweise:**
 - Projekte werden im Browser gespeichert, und zwar getrennt für jede Adresse. Nutze darum immer dieselbe Adresse, also `openstorm.local`.
-- Neue Versionen der App kommen mit einem neuen Pi-Image auf den Pi.
+- **Updates:** Gibt es eine neue Version, meldet die App das beim Start. Unter *Verbindung → Brücke aktualisieren* tippst du auf **„Jetzt aktualisieren“**. Der Pi lädt Brücke und App von GitHub und startet nur die Brücke neu, nicht den ganzen Pi. Danach lädt die App sich selbst neu. Dafür muss der Pi im Heim-WLAN mit Internet sein.
+- Ein neues Pi-Image braucht es nur bei Änderungen am System, also an Paketen, Diensten oder WLAN-Einrichtung.
 
 ## Weitere Verbindungswege
 
@@ -111,7 +112,7 @@ Bei jedem Push auf `main` baut GitHub automatisch:
 | Workflow | Ergebnis |
 |---|---|
 | `pages.yml` | Web-App auf https://mschneider85.github.io/openstorm/ |
-| `pi-image.yml` | SD-Karten-Image inkl. Web-App als Release `pi-image` |
+| `pi-image.yml` | SD-Karten-Image inkl. Web-App als Release `pi-image`, Update-Paket für laufende Pis als Release `pi-update` |
 | `ios.yml` | iPad-App als neuestes Release (nur bei Änderungen in `app/`) |
 
 Die Brücke lässt sich auch auf einem vorhandenen Raspberry Pi OS installieren: `sudo sh bridge/install-pi.sh`.

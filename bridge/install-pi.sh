@@ -10,6 +10,7 @@ pip3 install --break-system-packages --no-cache-dir bless==0.3.0
 
 install -d /opt/openstorm
 install -m 755 "$DIR/openstorm_bridge.py" /opt/openstorm/
+if [ -f "$DIR/VERSION" ]; then install -m 644 "$DIR/VERSION" /opt/openstorm/; fi
 install -m 644 "$DIR/openstorm-bridge.service" /etc/systemd/system/
 systemctl enable openstorm-bridge.service
 

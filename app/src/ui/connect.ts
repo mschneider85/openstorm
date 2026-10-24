@@ -1,6 +1,6 @@
 import { Ev3Brick } from '../ev3/ev3brick';
 import { SimBrick } from '../ev3/simbrick';
-import { BleBridge, WsBridge, bridgeUrlFromPage, webBluetoothAvailable, type BridgeConnection, type BridgeStatus, type Ev3Device } from '../transport/bridge';
+import { BleBridge, WsBridge, bridgeUrlFromPage, webBluetoothAvailable, type BridgeConnection, type BridgeStatus, type Ev3Device, type UpdateInfo } from '../transport/bridge';
 import { IosTransport, iosBluetoothAvailable, listPairedBricks, pairBrick } from '../transport/ios';
 import { SerialTransport, serialAvailable } from '../transport/serial';
 import type { Transport } from '../transport/transport';
@@ -174,6 +174,78 @@ async function showBridgeStatus(url: string, target: HTMLElement): Promise<void>
   }
 }
 
+async function checkUpdate(url: string): Promise<UpdateInfo> {
+  const bridge = await WsBridge.open(url);
+  try {
+    return await bridge.checkUpdate();
+  } finally {
+    bridge.close();
+  }
+}
+
+/** Offers a newer version of the bridge and the app, if there is one. */
+async function showUpdate(url: string, target: HTMLElement): Promise<void> {
+  let info: UpdateInfo;
+  try {
+    info = await checkUpdate(url);
+  } catch (e) {
+    target.replaceChildren(el('p', 'muted', `Update-Prüfung nicht möglich: ${(e as Error).message}`));
+    return;
+  }
+  if (!info.available) {
+    target.replaceChildren(el('p', 'muted', `Version ${info.current} – aktuell`));
+    return;
+  }
+  const status = el('p', 'status', `Neue Version ${info.latest} verfügbar (installiert: ${info.current}).`);
+  const button = el('button', 'btn primary', 'Jetzt aktualisieren');
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    status.textContent = 'Lade Update … (ca. 30 Sekunden, der Pi bleibt an)';
+    try {
+      await installUpdate(url, info.latest);
+      status.textContent = 'Update installiert. Die App wird neu geladen …';
+      location.reload();
+    } catch (e) {
+      status.textContent = `Update fehlgeschlagen: ${(e as Error).message}`;
+      button.disabled = false;
+    }
+  });
+  target.replaceChildren(status, button);
+}
+
+async function installUpdate(url: string, version: string): Promise<void> {
+  if (state.kind === 'bridge') state.setBrick(null, 'none');
+  const bridge = await WsBridge.open(url);
+  try {
+    await bridge.update();
+  } finally {
+    bridge.close();
+  }
+  // The bridge restarts with the new version; wait until it answers again.
+  for (let i = 0; i < 45; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const restarted = await WsBridge.open(url);
+      const s = await restarted.status();
+      restarted.close();
+      if (s.version === version) return;
+    } catch {
+      // still restarting
+    }
+  }
+  throw new Error('Die Brücke meldet sich nach dem Update nicht zurück');
+}
+
+/** Mentions a new version in the console once the app was loaded from the bridge. */
+async function announceUpdate(url: string): Promise<void> {
+  try {
+    const info = await checkUpdate(url);
+    if (info.available) log(`Neue Version ${info.latest} verfügbar – zum Aktualisieren oben rechts auf die Verbindung tippen.`);
+  } catch {
+    // no internet on the Pi (e.g. its own WLAN): nothing to announce
+  }
+}
+
 function serialSection(): HTMLElement {
   const status = el('p', 'status');
   const btn = el('button', 'btn primary', 'Seriellen Port wählen …');
@@ -211,7 +283,10 @@ async function fillDialog(): Promise<void> {
       'Leuchte am Pi: Dauerlicht = mit EV3 verbunden, langsames Blinken = wartet.',
     ]);
     if (state.kind !== 'bridge') void showBridgeStatus(bridgeUrl, wlan.querySelector('.status')!);
-    body.append(wlan);
+    const update = el('div', 'update', '');
+    update.append(el('p', 'muted', 'Suche nach Updates …'));
+    void showUpdate(bridgeUrl, update);
+    body.append(wlan, section('Brücke aktualisieren', update));
   }
   if (webBluetoothAvailable() && !iosBluetoothAvailable()) {
     body.append(
@@ -258,6 +333,7 @@ export function initConnect(d: HTMLDialogElement): void {
 export async function autoConnect(): Promise<void> {
   const url = bridgeUrlFromPage();
   if (!url || state.brick) return;
+  void announceUpdate(url);
   const quiet = el('p');
   try {
     const bridge = await WsBridge.open(url);

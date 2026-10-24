@@ -40,6 +40,17 @@ class FlakyBluez(FakeBluez):
             raise RuntimeError("Blocked through rfkill")
 
 
+class FakeUpdater:
+    current = "v1"
+
+    async def latest(self):
+        return {"version": "v2", "sha256": "x"}
+
+    async def install(self):
+        self.installed = True
+        return "v2"
+
+
 class FakeLink:
     """Echoes every byte back, like an EV3 that answers instantly."""
 
@@ -76,7 +87,9 @@ class WebTest(unittest.TestCase):
         with open(os.path.join(tmp, "index.html"), "w") as f:
             f.write("<title>OpenStorm</title>")
         link, led = FakeLink(), FakeLed()
-        bridge = ob.Bridge(bluez=FakeBluez(), link=link, led=led)
+        restarts = []
+        bridge = ob.Bridge(bluez=FakeBluez(), link=link, led=led, updater=FakeUpdater(),
+                           restart=lambda: restarts.append(True))
         link.on_data = bridge._from_ev3
         await bridge.start()
         client = TestClient(TestServer(ob.make_web_app(bridge, tmp)))
@@ -107,6 +120,12 @@ class WebTest(unittest.TestCase):
             bridge._ev3_closed("aus")
             self.assertEqual(json.loads((await ws.receive(timeout=2)).data)["event"], "disconnected")
             self.assertEqual(led.states[-1], False)
+
+            info = await ask({"cmd": "update_check"})
+            self.assertEqual(info, {"event": "update_info", "current": "v1", "latest": "v2", "available": True})
+            self.assertEqual(await ask({"cmd": "update"}), {"event": "updating", "version": "v2"})
+            await asyncio.sleep(1.2)
+            self.assertEqual(restarts, [True])
             await ws.close()
         finally:
             await client.close()
@@ -120,7 +139,7 @@ class WebTest(unittest.TestCase):
         ob.BLUETOOTH_RETRY_SECONDS = 0.05
         with open(os.path.join(tmp, "index.html"), "w") as f:
             f.write("<title>OpenStorm</title>")
-        bridge = ob.Bridge(bluez=FlakyBluez(), link=FakeLink(), led=FakeLed())
+        bridge = ob.Bridge(bluez=FlakyBluez(), link=FakeLink(), led=FakeLed(), updater=FakeUpdater())
         client = TestClient(TestServer(ob.make_web_app(bridge, tmp)))
         await client.start_server()
         try:

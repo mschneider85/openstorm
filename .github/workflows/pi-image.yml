@@ -41,6 +41,23 @@ jobs:
           npm run build
           cp -r dist ../bridge/www
 
+      # Running bridges update themselves from this release ("Aktualisieren" in the app),
+      # see Updater in bridge/openstorm_bridge.py.
+      - name: Update-Paket veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="$(git log -1 --format=%cd --date=format:%Y-%m-%d)-$(git rev-parse --short HEAD)"
+          echo "$VERSION" > bridge/VERSION
+          tar -czf openstorm-update.tar.gz -C bridge openstorm_bridge.py VERSION www
+          printf '{"version": "%s", "sha256": "%s"}\n' "$VERSION" \
+            "$(sha256sum openstorm-update.tar.gz | cut -d' ' -f1)" > version.json
+          cat version.json
+          gh release view pi-update >/dev/null 2>&1 || gh release create pi-update \
+            --title "Update für die Raspberry-Pi-Brücke" --latest=false \
+            --notes "Wird von der Brücke selbst geladen (App → Verbindung → Aktualisieren)."
+          gh release upload pi-update openstorm-update.tar.gz version.json --clobber
+
       - name: Image bauen
         id: build
         uses: pguyot/arm-runner-action@v2
