@@ -15,7 +15,7 @@ export const DEVICES: Record<number, DeviceInfo> = {
   7: {
     name: 'Großer Motor',
     modes: [
-      { name: 'Gezählte Grad', unit: '°' },
+      { name: 'Grad', unit: '°' },
       { name: 'Umdrehungen', unit: 'U' },
       { name: 'Geschwindigkeit', unit: '%' },
     ],
@@ -23,12 +23,12 @@ export const DEVICES: Record<number, DeviceInfo> = {
   8: {
     name: 'Mittlerer Motor',
     modes: [
-      { name: 'Gezählte Grad', unit: '°' },
+      { name: 'Grad', unit: '°' },
       { name: 'Umdrehungen', unit: 'U' },
       { name: 'Geschwindigkeit', unit: '%' },
     ],
   },
-  16: { name: 'Berührungssensor (Taster)', modes: [{ name: 'Gedrückt', unit: '' }, { name: 'Zähler', unit: '' }] },
+  16: { name: 'Taster', modes: [{ name: 'Gedrückt', unit: '' }, { name: 'Zähler', unit: '' }] },
   29: {
     name: 'Farbsensor',
     modes: [
