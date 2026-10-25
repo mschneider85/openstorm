@@ -30,7 +30,6 @@ const BUTTON_NUMBERS: [ButtonName, number][] = [['left', 1], ['enter', 2], ['rig
 
 export interface RunHooks {
   onStep: (blockId: string) => void;
-  onPrint: (text: string) => void;
   /** "zeichne … auf": a value of a series, `t` seconds after the program started. */
   onLog?: (name: string, t: number, value: number) => void;
   onLogClear?: () => void;
@@ -291,27 +290,6 @@ export class ProgramApi {
     await this.brick.motorStart(ports, Number(speed));
   }
 
-  async motorOff(ports: MotorPort[], brake: boolean): Promise<void> {
-    this.check();
-    await this.brick.motorStop(ports, brake);
-  }
-
-  /** Older block "Motor … Geschwindigkeit … für …, dann bremsen/ausrollen". */
-  async motorFor(ports: MotorPort[], speed: number, amount: number, unit: Unit, brake: boolean): Promise<void> {
-    this.check();
-    amount = Number(amount);
-    if (unit === 'seconds') {
-      const ms = Math.round(amount * 1000);
-      await this.brick.motorRunTime(ports, Number(speed), ms, brake);
-      await this.sleep(ms);
-    } else {
-      const degrees = Math.round(unit === 'rotations' ? amount * 360 : amount);
-      if (degrees === 0) return;
-      await this.brick.motorRunDegrees(ports, Number(speed), degrees, brake);
-    }
-    await this.untilIdle(ports);
-  }
-
   async motorDegrees(port: MotorPort): Promise<number> {
     return this.read(port, 0);
   }
@@ -436,28 +414,6 @@ export class ProgramApi {
     if (cm > 0) this.p.move.cmPerRotation = cm;
   }
 
-  /** Older blocks "Lenken …": steering -100..100 maps to the firmware turn ratio -200..200. */
-  async steerOn(ports: MotorPort[], steering: number, speed: number): Promise<void> {
-    this.check();
-    await this.brick.steerDegrees(ports, Number(speed), Number(steering) * 2, 0, true);
-  }
-
-  async steerFor(ports: MotorPort[], steering: number, speed: number, amount: number, unit: Unit, brake: boolean): Promise<void> {
-    this.check();
-    amount = Number(amount);
-    const turn = Number(steering) * 2;
-    if (unit === 'seconds') {
-      const ms = Math.round(amount * 1000);
-      await this.brick.steerTime(ports, Number(speed), turn, ms, brake);
-      await this.sleep(ms);
-    } else {
-      const degrees = Math.round(unit === 'rotations' ? amount * 360 : amount);
-      if (degrees === 0) return;
-      await this.brick.steerDegrees(ports, Number(speed), turn, degrees, brake);
-    }
-    await this.untilIdle(ports);
-  }
-
   // --- Display and light -----------------------------------------------------------
 
   private async draw(ops: DrawOp[]): Promise<void> {
@@ -505,11 +461,6 @@ export class ProgramApi {
     await this.draw([{ op: 'invert', x: 0, y: 0, w: SCREEN_WIDTH, h: SCREEN_HEIGHT }]);
   }
 
-  async displayText(text: unknown, line: number): Promise<void> {
-    this.check();
-    await this.brick.displayText(formatValue(text), Number(line));
-  }
-
   async displayClear(): Promise<void> {
     await this.draw([{ op: 'clear' }]);
   }
@@ -543,14 +494,6 @@ export class ProgramApi {
   setVolume(volume: number): void {
     this.check();
     this.p.volume = clamp(Number(volume), 0, 100);
-  }
-
-  /** Older block "Ton … Hz". */
-  async tone(frequency: number, seconds: number, volume: number, wait: boolean): Promise<void> {
-    this.check();
-    const ms = Math.round(Number(seconds) * 1000);
-    await this.brick.playTone(Number(volume), Number(frequency), ms);
-    if (wait) await this.sleep(ms);
   }
 
   // --- Sensors ----------------------------------------------------------------------
@@ -756,10 +699,6 @@ export class ProgramApi {
     this.p.hooks.onLogClear?.();
   }
 
-  print(value: unknown): void {
-    this.check();
-    this.p.hooks.onPrint(formatValue(value));
-  }
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));

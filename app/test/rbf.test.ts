@@ -17,7 +17,7 @@ const get = (id: string) => ({ block: { type: 'variables_get', fields: { VAR: { 
 const chain = (...blocks: object[]): object =>
   blocks.reduceRight<object | undefined>((next, b) => ({ ...b, ...(next ? { next: { block: next } } : {}) }), undefined)!;
 const start = (...blocks: object[]) => chain({ type: 'ev3_start' }, ...blocks);
-const show = (value: object, line = 1) => ({ type: 'ev3_display_text', inputs: { TEXT: value, LINE: num(line) } });
+const show = (value: object, line = 1) => ({ type: 'ev3_write_line', inputs: { TEXT: value, LINE: num(line) } });
 
 function workspace(blocks: object[], variables: { name: string; id: string }[] = []): Blockly.Workspace {
   const ws = new Blockly.Workspace();
@@ -57,27 +57,28 @@ describe('EV3 programs (.rbf)', () => {
     const vm = run(
       workspace([
         start(
-          { type: 'ev3_motor_for', fields: { PORT: 'B', UNIT: 'rotations', BRAKE: 'TRUE' }, inputs: { SPEED: num(75), AMOUNT: num(2) } },
+          { type: 'ev3_motor_run_for_speed', fields: { PORT: 'B', UNIT: 'rotations' }, inputs: { SPEED: num(75), AMOUNT: num(2) } },
           show({ block: { type: 'ev3_motor_degrees', fields: { PORT: 'B', MODE: 'degrees' } } }, 2),
         ),
       ]),
       { sensor: (port, mode) => (port === 17 && mode === 0 ? 720 : 0) },
     );
-    expect(vm.log).toEqual(['clear', 'run B 75 720deg brake', 'text 0,16 720']);
+    expect(vm.log).toEqual(['clear', 'run B 75 720deg brake', 'text 0,10 720']);
   });
 
   it('turns a negative amount into driving backwards', () => {
     const vm = run(
       workspace([
         start(
-          { type: 'ev3_motor_for', fields: { PORT: 'BC', UNIT: 'degrees', BRAKE: 'FALSE' }, inputs: { SPEED: num(50), AMOUNT: num(-90) } },
-          { type: 'ev3_steer_for', fields: { PORT: 'BC', UNIT: 'seconds', BRAKE: 'TRUE' }, inputs: { STEERING: num(-30), SPEED: num(150), AMOUNT: num(0.5) } },
-          { type: 'ev3_steer_on', fields: { PORT: 'BC' }, inputs: { STEERING: num(0), SPEED: num(40) } },
-          { type: 'ev3_motor_off', fields: { PORT: 'BC', BRAKE: 'TRUE' } },
+          { type: 'ev3_motor_set_stop', fields: { PORT: 'BC', ACTION: 'coast' } },
+          { type: 'ev3_motor_run_for_speed', fields: { PORT: 'BC', UNIT: 'degrees' }, inputs: { SPEED: num(50), AMOUNT: num(-90) } },
+          { type: 'ev3_move_steer_for_speed', fields: { UNIT: 'seconds' }, inputs: { STEERING: num(-30), SPEED: num(150), AMOUNT: num(0.5) } },
+          { type: 'ev3_move_steer_start_speed', inputs: { STEERING: num(0), SPEED: num(40) } },
+          { type: 'ev3_motor_stop', fields: { PORT: 'BC' } },
         ),
       ]),
     );
-    expect(vm.log).toEqual(['run BC -50 90deg', 'sync BC 100 turn -60 500ms brake', 'sync BC 40 turn 0 0deg brake', 'stop BC brake']);
+    expect(vm.log).toEqual(['run B -50 90deg', 'run C -50 90deg', 'sync BC 100 turn -60 500ms brake', 'sync BC 40 turn 0 0deg brake', 'stop B', 'stop C']);
   });
 
   it('computes amounts at run time, including the sign', () => {
@@ -86,7 +87,7 @@ describe('EV3 programs (.rbf)', () => {
         [
           start(
             { type: 'variables_set', fields: { VAR: { id: 'n' } }, inputs: { VALUE: num(-0.5) } },
-            { type: 'ev3_motor_for', fields: { PORT: 'A', UNIT: 'rotations', BRAKE: 'TRUE' }, inputs: { SPEED: num(30), AMOUNT: get('n') } },
+            { type: 'ev3_motor_run_for_speed', fields: { PORT: 'A', UNIT: 'rotations' }, inputs: { SPEED: num(30), AMOUNT: get('n') } },
           ),
         ],
         [{ name: 'n', id: 'n' }],
@@ -118,13 +119,13 @@ describe('EV3 programs (.rbf)', () => {
         [{ name: 'i', id: 'i' }],
       ),
     );
-    expect(vm.log.filter((l) => l.startsWith('text'))).toEqual(['text 0,0 Runde 1', 'text 0,0 Runde 2', 'text 0,0 Runde 3', 'text 0,16 0.75']);
+    expect(vm.log.filter((l) => l.startsWith('text'))).toEqual(['text 0,0 Runde 1', 'text 0,0 Runde 2', 'text 0,0 Runde 3', 'text 0,10 0.75']);
   });
 
   it('waits for the touch sensor and decides with if/else', () => {
     const ws = workspace([
         start(
-          { type: 'ev3_wait_until', inputs: { COND: { block: { type: 'ev3_touch', fields: { PORT: '1' } } } } },
+          { type: 'ev3_wait_until', inputs: { COND: { block: { type: 'ev3_touch_is', fields: { PORT: '1', STATE: 'pressed' } } } } },
           {
             type: 'controls_if',
             extraState: { hasElse: true },
@@ -152,12 +153,12 @@ describe('EV3 programs (.rbf)', () => {
   it('runs start blocks in parallel', () => {
     const vm = run(
       workspace([
-        start({ type: 'ev3_tone', fields: { WAIT: 'TRUE' }, inputs: { FREQ: num(440), SECONDS: num(1), VOLUME: num(80) } }, { type: 'ev3_led', fields: { PATTERN: 'orange' } }),
+        start({ type: 'ev3_beep_for', inputs: { NOTE: num(69), SECONDS: num(1) } }, { type: 'ev3_led', fields: { PATTERN: 'orange' } }),
         start({ type: 'ev3_wait', inputs: { SECONDS: num(0.1) } }, { type: 'ev3_led', fields: { PATTERN: 'green' } }),
       ]),
     );
     // The second thread finishes its wait while the first one still plays the tone.
-    expect(vm.log).toEqual(['tone 440 1000 80', 'led 1', 'led 3']);
+    expect(vm.log).toEqual(['tone 440 1000 100', 'led 1', 'led 3']);
   });
 
   it('inlines own blocks with parameters and return values', () => {
@@ -197,7 +198,7 @@ describe('EV3 programs (.rbf)', () => {
     const vm = run(
       workspace([
         start(
-          show({ block: { type: 'ev3_button', fields: { BUTTON: 'enter' } } }),
+          show({ block: { type: 'ev3_button_is', fields: { BUTTON: 'enter', STATE: 'pressed' } } }),
           show({ block: { type: 'math_arithmetic', fields: { OP: 'DIVIDE' }, inputs: { A: { block: { type: 'ev3_timer' } }, B: num(3) } } }, 2),
         ),
       ]),
@@ -218,7 +219,7 @@ describe('EV3 programs (.rbf)', () => {
       [{ name: 'v', id: 'v' }],
     );
     expect(() => compileRbf(ws)).toThrow(/feste Art/);
-    const warnings = compileRbf(workspace([start({ type: 'ev3_print', inputs: { VALUE: text('x') } })])).warnings;
-    expect(warnings[0]).toMatch(/keine Wirkung/);
+    const warnings = compileRbf(workspace([start({ type: 'ev3_log', fields: { NAME: 'x' }, inputs: { VALUE: num(1) } })])).warnings;
+    expect(warnings[0]).toMatch(/nicht aufgezeichnet/);
   });
 });

@@ -27,12 +27,15 @@ function workspace(...topBlocks: object[]): Blockly.Workspace {
 let brick: SimBrick;
 afterEach(() => brick?.close());
 
-async function run(ws: Blockly.Workspace, steps: string[] = [], printed: string[] = []) {
+/** Values recorded with "zeichne … auf" show what a program computed. */
+const record = (value: object) => ({ type: 'ev3_log', fields: { NAME: 'out' }, inputs: { VALUE: value } });
+
+async function run(ws: Blockly.Workspace, steps: string[] = [], printed: number[] = []) {
   brick = new SimBrick();
   const { code } = compile(ws);
   const program = new ProgramRun(brick, code, {
     onStep: (id) => steps.push(id),
-    onPrint: (t) => printed.push(t),
+    onLog: (_name, _t, v) => printed.push(v),
   });
   return { program, code };
 }
@@ -43,14 +46,14 @@ describe('block programs', () => {
       chain(
         { type: 'ev3_start' },
         { type: 'ev3_motor_reset', fields: { PORT: 'B' } },
-        { type: 'ev3_motor_for', fields: { PORT: 'B', UNIT: 'rotations', BRAKE: 'TRUE' }, inputs: { SPEED: num(100), AMOUNT: num(1) } },
-        { type: 'ev3_print', inputs: { VALUE: { block: { type: 'ev3_motor_degrees', fields: { PORT: 'B', MODE: 'degrees' } } } } },
+        { type: 'ev3_motor_run_for_speed', fields: { PORT: 'B', UNIT: 'rotations' }, inputs: { SPEED: num(100), AMOUNT: num(1) } },
+        record({ block: { type: 'ev3_motor_degrees', fields: { PORT: 'B', MODE: 'degrees' } } }),
       ),
     );
-    const printed: string[] = [];
+    const printed: number[] = [];
     const { program } = await run(ws, [], printed);
     await program.done;
-    expect(printed).toEqual(['360']);
+    expect(printed).toEqual([360]);
   });
 
   it('runs several start blocks in parallel and shares variables', async () => {
@@ -69,24 +72,24 @@ describe('block programs', () => {
             chain(
               { type: 'ev3_start' },
               { type: 'ev3_wait', inputs: { SECONDS: num(0.05) } },
-              { type: 'ev3_print', inputs: { VALUE: { block: { type: 'variables_get', fields: { VAR: { id: v.getId() } } } } } },
+              record({ block: { type: 'variables_get', fields: { VAR: { id: v.getId() } } } }),
             ),
           ],
         },
       },
       ws,
     );
-    const printed: string[] = [];
+    const printed: number[] = [];
     const { program } = await run(ws, [], printed);
     await program.done;
-    expect(printed).toEqual(['7']);
+    expect(printed).toEqual([7]);
   });
 
   it('stops an endless loop and coasts the motors', async () => {
     const ws = workspace(
       chain(
         { type: 'ev3_start' },
-        { type: 'ev3_motor_on', fields: { PORT: 'C' }, inputs: { SPEED: num(30) } },
+        { type: 'ev3_motor_start_speed', fields: { PORT: 'C' }, inputs: { SPEED: num(30) } },
         { type: 'ev3_forever', inputs: { DO: { block: { type: 'ev3_wait', inputs: { SECONDS: num(0.01) } } } } },
       ),
     );
@@ -101,17 +104,17 @@ describe('block programs', () => {
     const ws = workspace(
       chain(
         { type: 'ev3_start' },
-        { type: 'ev3_wait_until', inputs: { COND: { block: { type: 'ev3_touch', fields: { PORT: '1' } } } } },
-        { type: 'ev3_print', inputs: { VALUE: { shadow: { type: 'text', fields: { TEXT: 'gedrückt' } } } } },
+        { type: 'ev3_wait_until', inputs: { COND: { block: { type: 'ev3_touch_is', fields: { PORT: '1', STATE: 'pressed' } } } } },
+        record(num(1)),
       ),
     );
-    const printed: string[] = [];
+    const printed: number[] = [];
     const { program } = await run(ws, [], printed);
     await new Promise((r) => setTimeout(r, 60));
     expect(printed).toEqual([]);
     brick.setSensorValue('1', 1);
     await program.done;
-    expect(printed).toEqual(['gedrückt']);
+    expect(printed).toEqual([1]);
   });
 
   it('supports user-defined blocks with awaits inside', async () => {
@@ -119,7 +122,7 @@ describe('block programs', () => {
       {
         type: 'procedures_defnoreturn',
         fields: { NAME: 'piepen' },
-        inputs: { STACK: { block: { type: 'ev3_print', inputs: { VALUE: { shadow: { type: 'text', fields: { TEXT: 'piep' } } } } } } },
+        inputs: { STACK: { block: record(num(1)) } },
       },
       chain(
         { type: 'ev3_start' },
@@ -128,16 +131,16 @@ describe('block programs', () => {
       ),
     );
     const steps: string[] = [];
-    const printed: string[] = [];
+    const printed: number[] = [];
     const { program, code } = await run(ws, steps, printed);
     await program.done;
     expect(code).toContain('async function piepen');
-    expect(printed).toEqual(['piep', 'piep']);
+    expect(printed).toEqual([1, 1]);
     expect(steps.length).toBeGreaterThan(3);
   });
 
   it('ignores loose blocks without a start block', async () => {
-    const ws = workspace({ type: 'ev3_print', inputs: { VALUE: { shadow: { type: 'text', fields: { TEXT: 'x' } } } } });
+    const ws = workspace(record(num(1)));
     expect(compile(ws).threads).toBe(0);
   });
 });

@@ -164,26 +164,8 @@ const blocks: Record<string, (b: B, g: Gen) => string | [string, Order] | null> 
   ev3_list_contains: (b, g) => [`(api.listIndex(${list(b, g)}, ${val(b, g, 'ITEM')}) > 0)`, Order.ATOMIC],
   ev3_list_value: (b, g) => call(`api.listText(${list(b, g)})`),
 
-  ev3_print: (b, g) => `api.print(${val(b, g, 'VALUE')});\n`,
   ev3_log: (b, g) => `api.logValue(${field(b, 'NAME')}, ${num(b, g, 'VALUE')});\n`,
   ev3_log_clear: () => 'api.clearLog();\n',
-
-  // Older OpenStorm blocks
-  ev3_motor_on: (b, g) => `await api.motorOn(${ports(b)}, ${num(b, g, 'SPEED', '50')});\n`,
-  ev3_motor_for: (b, g) =>
-    `await api.motorFor(${ports(b)}, ${num(b, g, 'SPEED', '50')}, ${num(b, g, 'AMOUNT', '1')}, ${field(b, 'UNIT')}, ${bool(b, 'BRAKE')});\n`,
-  ev3_motor_off: (b) => `await api.motorOff(${ports(b)}, ${bool(b, 'BRAKE')});\n`,
-  ev3_steer_on: (b, g) => `await api.steerOn(${ports(b)}, ${num(b, g, 'STEERING')}, ${num(b, g, 'SPEED', '50')});\n`,
-  ev3_steer_for: (b, g) =>
-    `await api.steerFor(${ports(b)}, ${num(b, g, 'STEERING')}, ${num(b, g, 'SPEED', '50')}, ${num(b, g, 'AMOUNT', '1')}, ${field(b, 'UNIT')}, ${bool(b, 'BRAKE')});\n`,
-  ev3_display_text: (b, g) => `await api.displayText(${val(b, g, 'TEXT')}, ${num(b, g, 'LINE', '1')});\n`,
-  ev3_tone: (b, g) =>
-    `await api.tone(${num(b, g, 'FREQ', '440')}, ${num(b, g, 'SECONDS', '0.5')}, ${num(b, g, 'VOLUME', '50')}, ${bool(b, 'WAIT')});\n`,
-  ev3_touch: (b) => awaited(`api.touch(${field(b, 'PORT')})`),
-  ev3_color: (b) => awaited(`api.sensor(${field(b, 'PORT')}, ${b.getFieldValue('MODE')})`),
-  ev3_ultrasonic: (b) => awaited(`api.sensor(${field(b, 'PORT')}, 0)`),
-  ev3_gyro: (b) => awaited(`api.sensor(${field(b, 'PORT')}, ${b.getFieldValue('MODE')})`),
-  ev3_button: (b) => awaited(`api.button(${field(b, 'BUTTON')})`),
 };
 
 /** The condition of an event block, evaluated over and over by the runtime. */

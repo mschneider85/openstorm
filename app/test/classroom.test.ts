@@ -21,7 +21,8 @@ const get = (id: string) => ({ block: { type: 'variables_get', fields: { VAR: { 
 const chain = (...blocks: object[]): object =>
   blocks.reduceRight<object | undefined>((next, b) => ({ ...b, ...(next ? { next: { block: next } } : {}) }), undefined)!;
 const start = (...blocks: object[]) => chain({ type: 'ev3_start' }, ...blocks);
-const print = (value: object) => ({ type: 'ev3_print', inputs: { VALUE: value } });
+/** Records a value through the "Messwerte" hook, to check what a program computes. */
+const print = (value: object) => ({ type: 'ev3_log', fields: { NAME: 'out' }, inputs: { VALUE: value } });
 const line = (value: object, n = 1) => ({ type: 'ev3_write_line', inputs: { TEXT: value, LINE: num(n) } });
 
 function workspace(blocks: object[], variables: { name: string; id: string; type?: string }[] = []): Blockly.Workspace {
@@ -36,8 +37,8 @@ afterEach(() => brick?.close());
 async function live(ws: Blockly.Workspace, setup?: (b: SimBrick) => void) {
   brick = new SimBrick();
   setup?.(brick);
-  const printed: string[] = [];
-  const program = new ProgramRun(brick, compile(ws).code, { onStep: () => {}, onPrint: (t) => printed.push(t) });
+  const printed: number[] = [];
+  const program = new ProgramRun(brick, compile(ws).code, { onStep: () => {}, onLog: (_name, _t, v) => printed.push(v) });
   return { program, printed };
 }
 
@@ -91,17 +92,17 @@ describe('events', () => {
       chain(
         { type: 'ev3_when_touch', fields: { PORT: '1', EVENT: 'pressed' } },
         { type: 'ev3_broadcast_wait', fields: { MESSAGE: 'los' } },
-        print(text('fertig')),
+        print(num(2)),
         { type: 'ev3_stop', fields: { WHAT: 'all' } },
       ),
-      chain({ type: 'ev3_when_message', fields: { MESSAGE: 'los' } }, { type: 'ev3_wait', inputs: { SECONDS: num(0.05) } }, print(text('empfangen'))),
+      chain({ type: 'ev3_when_message', fields: { MESSAGE: 'los' } }, { type: 'ev3_wait', inputs: { SECONDS: num(0.05) } }, print(num(1))),
     ]);
     const { program, printed } = await live(ws);
     await sleep(80);
     expect(printed).toEqual([]);
     brick.setSensorValue('1', 1);
     await program.done;
-    expect(printed).toEqual(['empfangen', 'fertig']);
+    expect(printed).toEqual([1, 2]);
   });
 
   it('runs the same program on the brick', () => {
@@ -195,7 +196,7 @@ describe('sensors', () => {
     expect(vm(ws, { sensor: (port, mode) => (port === 2 && mode === 0 ? 35 : 0) }).display).toEqual(['50']);
     const { program, printed } = await live(ws, (b) => (b.sensorValues['3'][0] = 35));
     await program.done;
-    expect(printed).toEqual(['50']);
+    expect(printed).toEqual([50]);
   });
 });
 
@@ -259,7 +260,7 @@ describe('review fixes', () => {
     brick.sensorValues['3'][2] = 3; // changes while the stack still waits
     await sleep(500);
     await program.stop();
-    expect(printed).toEqual(['3', '3']);
+    expect(printed).toEqual([3, 3]);
   });
 
   it('keeps the simulated screen small without losing what is visible', async () => {

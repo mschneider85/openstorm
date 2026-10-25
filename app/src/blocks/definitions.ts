@@ -16,7 +16,6 @@ export const COLORS = {
   lists: '#ff661a',
   myBlocks: '#ff6680',
   datalog: '#0fbd8c',
-  app: '#7a8794',
 };
 
 /** Variable type of lists ("Liste anlegen"). */
@@ -26,7 +25,6 @@ const MOTOR = [['A', 'A'], ['B', 'B'], ['C', 'C'], ['D', 'D']];
 const MOTOR_OR_GROUP = [...MOTOR, ['B+C', 'BC'], ['A+D', 'AD'], ['A+B', 'AB'], ['C+D', 'CD'], ['alle', 'ABCD']];
 /** Left motor first. */
 const MOVE_PAIRS = [['B+C', 'BC'], ['C+B', 'CB'], ['A+D', 'AD'], ['D+A', 'DA'], ['A+B', 'AB'], ['B+A', 'BA'], ['C+D', 'CD'], ['D+C', 'DC']];
-const LEGACY_PAIR = [['B+C', 'BC'], ['A+D', 'AD'], ['A+B', 'AB'], ['C+D', 'CD']];
 const SENSOR = [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']];
 const DIRECTION = [['↻', 'cw'], ['↺', 'ccw']];
 const MOTOR_UNIT = [['Umdrehungen', 'rotations'], ['Grad', 'degrees'], ['Sekunden', 'seconds']];
@@ -122,7 +120,7 @@ export function defineBlocks(): void {
     tuneKeyboards();
   }
   // Decisions belong to the orange control category, as in EV3 Classroom.
-  for (const type of ['controls_if', 'controls_flow_statements']) {
+  for (const type of ['controls_if']) {
     const block = Blockly.Blocks[type];
     const init = block.init;
     block.init = function (this: Blockly.Block) {
@@ -733,90 +731,6 @@ export function defineBlocks(): void {
       },
     ]),
 
-    // --- Older OpenStorm block, no longer in the toolbox ----------------------------------
-    {
-      type: 'ev3_print',
-      message0: 'in der App ausgeben %1',
-      args0: [value('VALUE')],
-      ...statement,
-      colour: COLORS.app,
-      tooltip: 'Zeigt einen Wert in der Ausgabe unten in der App an.',
-    },
-
-    // --- Ältere OpenStorm-Blöcke ---------------------------------------------------
-    // Not in the toolbox any more; they stay so that existing programs still load and run.
-    ...group(COLORS.motors, [
-      {
-        type: 'ev3_motor_on',
-        message0: 'Motor %1 an, Geschwindigkeit %2 %%',
-        args0: [dropdown('PORT', MOTOR_OR_GROUP), number('SPEED')],
-        ...statement,
-      },
-      {
-        type: 'ev3_motor_for',
-        message0: 'Motor %1 Geschwindigkeit %2 %% für %3 %4 , dann %5',
-        args0: [dropdown('PORT', MOTOR_OR_GROUP), number('SPEED'), number('AMOUNT'), dropdown('UNIT', MOTOR_UNIT), dropdown('BRAKE', [['bremsen', 'TRUE'], ['ausrollen', 'FALSE']])],
-        ...statement,
-      },
-      {
-        type: 'ev3_motor_off',
-        message0: 'Motor %1 aus, %2',
-        args0: [dropdown('PORT', MOTOR_OR_GROUP), dropdown('BRAKE', [['bremsen', 'TRUE'], ['ausrollen', 'FALSE']])],
-        ...statement,
-      },
-    ]),
-    ...group(COLORS.movement, [
-      {
-        type: 'ev3_steer_on',
-        message0: 'Lenken %1 Richtung %2 Geschwindigkeit %3 %%',
-        args0: [dropdown('PORT', LEGACY_PAIR), number('STEERING'), number('SPEED')],
-        ...statement,
-      },
-      {
-        type: 'ev3_steer_for',
-        message0: 'Lenken %1 Richtung %2 Geschwindigkeit %3 %% für %4 %5 , dann %6',
-        args0: [dropdown('PORT', LEGACY_PAIR), number('STEERING'), number('SPEED'), number('AMOUNT'), dropdown('UNIT', MOTOR_UNIT), dropdown('BRAKE', [['bremsen', 'TRUE'], ['ausrollen', 'FALSE']])],
-        ...statement,
-      },
-    ]),
-    ...group(COLORS.display, [
-      {
-        type: 'ev3_display_text',
-        message0: 'Anzeige: schreibe %1 in Zeile %2',
-        args0: [value('TEXT'), number('LINE')],
-        ...statement,
-      },
-    ]),
-    ...group(COLORS.sound, [
-      {
-        type: 'ev3_tone',
-        message0: 'Ton %1 Hz für %2 s, Lautstärke %3 %% %4',
-        args0: [number('FREQ'), number('SECONDS'), number('VOLUME'), dropdown('WAIT', [['und warten', 'TRUE'], ['ohne warten', 'FALSE']])],
-        ...statement,
-      },
-    ]),
-    ...group(COLORS.sensors, [
-      { type: 'ev3_touch', message0: 'Berührungssensor %1 gedrückt?', args0: [dropdown('PORT', SENSOR)], ...reporter('Boolean') },
-      {
-        type: 'ev3_color',
-        message0: 'Farbsensor %1 %2',
-        args0: [dropdown('PORT', SENSOR), dropdown('MODE', [['Farbe (Nummer)', '2'], ['reflektiertes Licht %', '0'], ['Umgebungslicht %', '1']])],
-        ...reporter('Number'),
-      },
-      { type: 'ev3_ultrasonic', message0: 'Ultraschall %1 Abstand in cm', args0: [dropdown('PORT', SENSOR)], ...reporter('Number') },
-      {
-        type: 'ev3_gyro',
-        message0: 'Gyrosensor %1 %2',
-        args0: [dropdown('PORT', SENSOR), dropdown('MODE', [['Winkel °', '0'], ['Drehrate °/s', '1']])],
-        ...reporter('Number'),
-      },
-      {
-        type: 'ev3_button',
-        message0: 'Stein-Taste %1 gedrückt?',
-        args0: [dropdown('BUTTON', BUTTONS)],
-        ...reporter('Boolean'),
-      },
-    ]),
   ]);
 }
 

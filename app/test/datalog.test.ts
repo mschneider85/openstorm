@@ -33,7 +33,6 @@ describe('recording values', () => {
     const values: [string, number, number][] = [];
     const run = new ProgramRun(brick, compile(program()).code, {
       onStep: () => {},
-      onPrint: () => {},
       onLog: (name, t, v) => values.push([name, t, v]),
     });
     await run.done;

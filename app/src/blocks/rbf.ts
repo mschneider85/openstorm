@@ -39,8 +39,6 @@ export class RbfError extends Error {
 /** Bytes per text value; joined texts must stay below this. */
 const STR = 256;
 const LAYER = lc(0);
-/** Line height of the older block "Anzeige: schreibe … in Zeile" (8 lines). */
-const OLD_LINE_HEIGHT = 16;
 /** opREAD8/opWRITE8 take a DATA8 index, so only the first 127 characters of a text are reachable. */
 const MAX_INDEX = 126;
 
@@ -591,8 +589,6 @@ class Compiler {
         return this.color(port());
       case 'ev3_color_is':
         return this.cmp(op.CP_EQF, this.color(port()), num(Number(f('COLOR'))));
-      case 'ev3_touch':
-        return this.touch(port());
       case 'ev3_touch_is':
         return f('STATE') === 'released' ? this.not(this.touch(port())) : this.touch(port());
       case 'ev3_distance':
@@ -605,10 +601,6 @@ class Compiler {
         return this.compareOp(this.angle(port()), f('OP'), this.numIn(block, 'VALUE'));
       case 'ev3_rate':
         return this.numVal(this.readValues(port(), 3, 2)[1]);
-      case 'ev3_color':
-      case 'ev3_gyro':
-        return this.readSensor(port(), Number(f('MODE')));
-      case 'ev3_ultrasonic':
       case 'ev3_infrared':
         return this.readSensor(port(), 0);
       case 'ev3_ir_beacon': {
@@ -621,8 +613,6 @@ class Compiler {
         return this.cmp(op.CP_EQF, this.numVal(this.readValues(port(), 2, 4)[Number(f('CHANNEL')) - 1]), num(Number(f('BUTTON'))));
       case 'ev3_motor_degrees':
         return this.readSensor(port(), f('MODE') === 'speed' ? 2 : 0);
-      case 'ev3_button':
-        return this.button(f('BUTTON'));
       case 'ev3_button_is':
         return f('STATE') === 'released' ? this.not(this.button(f('BUTTON'))) : this.button(f('BUTTON'));
       case 'ev3_button_value':
@@ -1090,7 +1080,6 @@ class Compiler {
     const f = (name: string) => block.getFieldValue(name);
     const portList = () => (f('PORT') as string).split('') as MotorPort[];
     const ports = () => lc(portMask(portList()));
-    const brake = () => lc(f('BRAKE') === 'TRUE' ? 1 : 0);
     const port = () => f('PORT') as string;
     const draw = (sub: number, ...operands: Operand[]) => {
       c.op([op.UI_DRAW, sub], ...operands);
@@ -1142,12 +1131,6 @@ class Compiler {
         }
         if (block.getInput('ELSE')) this.statements(block.getInputTargetBlock('ELSE'));
         c.place(end);
-        return;
-      }
-      case 'controls_flow_statements': {
-        const loop = this.t.loops.at(-1);
-        if (!loop) throw new RbfError('„Schleife abbrechen“ steht nicht in einer Schleife.', block.id);
-        c.jump(op.JR, f('FLOW') === 'BREAK' ? loop.exit : loop.next);
         return;
       }
       case 'ev3_stop':
@@ -1240,25 +1223,12 @@ class Compiler {
       case 'ev3_motor_set_stop':
         for (const p of portList()) c.op(op.MOVE8_8, lc(f('ACTION') === 'hold' ? 1 : 0), this.motorHold(p));
         return;
-      case 'ev3_motor_on':
       case 'ev3_motor_start_speed':
-        c.op(op.OUTPUT_SPEED, LAYER, ports(), this.speed(block, 'SPEED', block.type === 'ev3_motor_on' ? 50 : 75));
+        c.op(op.OUTPUT_SPEED, LAYER, ports(), this.speed(block, 'SPEED', 75));
         c.op(op.OUTPUT_START, LAYER, ports());
-        return;
-      case 'ev3_motor_off':
-        c.op(op.OUTPUT_STOP, LAYER, ports(), brake());
         return;
       case 'ev3_motor_reset':
         c.op(op.OUTPUT_CLR_COUNT, LAYER, ports());
-        return;
-      case 'ev3_motor_for':
-        this.runFor(ports(), this.numIn(block, 'SPEED', 50), this.numIn(block, 'AMOUNT', 1), f('UNIT'), brake(), null, true);
-        return;
-      case 'ev3_steer_on':
-        c.op(op.OUTPUT_STEP_SYNC, LAYER, ports(), this.speed(block, 'SPEED', 50), this.turn(block), lc(0), lc(1));
-        return;
-      case 'ev3_steer_for':
-        this.runFor(ports(), this.numIn(block, 'SPEED', 50), this.numIn(block, 'AMOUNT', 1), f('UNIT'), brake(), this.turn(block), true);
         return;
 
       // Fahren
@@ -1312,14 +1282,11 @@ class Compiler {
         this.wait(this.numIn(block, 'SECONDS', 2));
         this.clearDisplay();
         return;
-      case 'ev3_write_line':
-      case 'ev3_display_text': {
-        const old = block.type === 'ev3_display_text';
-        const height = old ? OLD_LINE_HEIGHT : LINE_HEIGHT;
+      case 'ev3_write_line': {
         const text = this.strIn(block, 'TEXT');
-        const line = this.clampNum(this.mathOp(math.ROUND, this.numIn(block, 'LINE', 1), Math.round), 1, old ? 8 : LINES);
-        const y = this.int(this.mul(this.sub(line, num(1)), num(height)), 16);
-        c.op([op.UI_DRAW, uiDraw.FILLRECT], lc(0), lc(0), y, lc(SCREEN_WIDTH), lc(height));
+        const line = this.clampNum(this.mathOp(math.ROUND, this.numIn(block, 'LINE', 1), Math.round), 1, LINES);
+        const y = this.int(this.mul(this.sub(line, num(1)), num(LINE_HEIGHT)), 16);
+        c.op([op.UI_DRAW, uiDraw.FILLRECT], lc(0), lc(0), y, lc(SCREEN_WIDTH), lc(LINE_HEIGHT));
         c.op([op.UI_DRAW, uiDraw.SELECT_FONT], lc(0));
         return draw(uiDraw.TEXT, lc(1), lc(0), y, text.op);
       }
@@ -1376,14 +1343,6 @@ class Compiler {
       case 'ev3_volume_set':
         c.op(op.MOVEF_F, this.clampNum(this.numIn(block, 'VOLUME', 100), 0, 100).op, this.volume());
         return;
-      case 'ev3_tone': {
-        const volume = this.int(this.clampNum(this.numIn(block, 'VOLUME', 50), 0, 100), 8);
-        const freq = this.int(this.clampNum(this.numIn(block, 'FREQ', 440), 250, 10000), 16);
-        const ms = this.clampNum(this.mul(this.numIn(block, 'SECONDS', 0.5), num(1000)), 1, 32767);
-        c.op([op.SOUND, sound.TONE], volume, freq, this.int(ms, 16));
-        if (f('WAIT') === 'TRUE') c.op(op.SOUND_READY);
-        return;
-      }
 
       // Sensoren
       case 'ev3_light_calibrate': {
@@ -1411,9 +1370,6 @@ class Compiler {
       case 'ev3_timer_reset':
         c.op(op.TIMER_READ, gv(this.timerStart));
         return;
-      case 'ev3_print':
-        this.warnings.add('„in der App ausgeben“ hat auf dem EV3 keine Wirkung (es gibt dort keine App-Ausgabe).');
-        return;
       case 'ev3_log':
       case 'ev3_log_clear':
         this.warnings.add('Messwerte werden auf dem EV3 nicht aufgezeichnet, nur wenn das Programm mit ▶ Start in der App läuft.');
@@ -1428,11 +1384,6 @@ class Compiler {
 
   private speed(block: Blockly.Block, name: string, fallback: number): Operand {
     return this.int(this.clampNum(this.numIn(block, name, fallback), -100, 100), 8);
-  }
-
-  /** Steering -100..100 as in the EV3 software; the firmware wants -200..200. */
-  private turn(block: Blockly.Block): Operand {
-    return this.int(this.clampNum(this.mul(this.numIn(block, 'STEERING'), num(2)), -200, 200), 16);
   }
 
   /**

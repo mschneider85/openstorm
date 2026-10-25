@@ -15,8 +15,6 @@ import { MAX_SERIES, addValue, clearValues } from './datalog';
 
 const PROJECTS_KEY = 'openstorm.projects';
 const CURRENT_KEY = 'openstorm.current';
-/** Disabled reason that earlier versions set on loose blocks (they were shown hatched). */
-const ORPHANED = 'ORPHANED_BLOCK';
 const projectKey = (id: string) => `openstorm.project.${id}`;
 
 interface ProjectMeta {
@@ -89,7 +87,6 @@ function load(id: string): void {
   try {
     workspace.clear();
     Blockly.serialization.workspaces.load(data, workspace);
-    enableOrphans();
   } finally {
     Blockly.Events.enable();
   }
@@ -292,13 +289,6 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
   window.addEventListener('pagehide', save);
 }
 
-/** Loose blocks simply do not run; they keep their normal look. */
-function enableOrphans(): void {
-  for (const block of workspace.getAllBlocks(false)) {
-    if (block.hasDisabledReason(ORPHANED)) block.setDisabledReason(false, ORPHANED);
-  }
-}
-
 /** Shows the program from its top left corner, where the start block usually is. */
 function scrollToStart(): void {
   const content = workspace.getMetricsManager().getContentMetrics();
@@ -374,7 +364,6 @@ export async function startProgram(): Promise<void> {
       workspace.highlightBlock(id, true);
       highlighted.set(root, id);
     },
-    onPrint: (text) => log(text, 'output'),
     onLog: (name, t, value) => {
       if (!addValue(name, t, value) && !tooManySeries) {
         tooManySeries = true;
