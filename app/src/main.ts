@@ -1,4 +1,3 @@
-import { Capacitor } from '@capacitor/core';
 import './styles.css';
 import { state } from './state';
 import { clearLog, showView } from './ui/console';
@@ -56,7 +55,7 @@ $('#console-toggle').addEventListener('click', () => {
   setTimeout(resizeEditor, 220);
 });
 
-const LABELS = { none: 'Nicht verbunden', sim: 'Simulator', ios: '', serial: '', bridge: '' };
+const LABELS = { none: 'Nicht verbunden', sim: 'Simulator', serial: '', bridge: '' };
 state.subscribe(() => {
   const btn = $('#connect-btn');
   btn.dataset.kind = state.kind;
@@ -69,7 +68,7 @@ state.subscribe(() => {
 window.addEventListener('resize', resizeEditor);
 void autoConnect();
 
-// Offline support for the browser version; the iOS app ships its files itself.
-if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator && import.meta.env.PROD) {
+// Offline support.
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   void import('virtual:pwa-register').then(({ registerSW }) => registerSW({ immediate: true }));
 }

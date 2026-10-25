@@ -104,15 +104,6 @@ Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernim
 | iPad mit [Bluefy](https://apps.apple.com/de/app/id1492822055) | über die Pi-Brücke per Bluetooth LE: https://mschneider85.github.io/openstorm/ |
 | PC/Mac mit Chrome oder Edge | über die Pi-Brücke (Web Bluetooth) oder direkt über den Bluetooth-COM-Port des gekoppelten EV3 (Web Serial) |
 | Jeder Browser | Simulator |
-| iPad mit selbst installierter App | natives Bluetooth-Plugin (siehe unten) |
-
-### Optional: native iPad-App per Sideloading
-
-Die App lässt sich auch als echte iPad-App installieren. Sie spricht dann ohne Brücke direkt mit dem EV3 (dafür am EV3 **iPhone/iPad/iPod an**). Das braucht aber einen PC, ein Kabel, eine Apple-ID und muss alle 7 Tage erneuert werden.
-
-- Neueste Version: **https://github.com/mschneider85/openstorm/releases/latest/download/OpenStorm.ipa**
-- Installieren z. B. mit [Sideloadly](https://sideloadly.io) oder SideStore. Auf dem PC wird der Apple-USB-Treiber gebraucht (`AppleMobileDeviceSupport64.msi` aus dem iTunes-Installer von apple.com).
-- Auf dem iPad den *Entwicklermodus* einschalten und unter *VPN & Geräteverwaltung* der Apple-ID vertrauen.
 
 ## Entwickeln (Linux/WSL/Windows)
 
@@ -133,7 +124,6 @@ Bei jedem Push auf `main` baut GitHub automatisch:
 |---|---|
 | `pages.yml` | Web-App auf https://mschneider85.github.io/openstorm/ |
 | `pi-image.yml` | SD-Karten-Image inkl. Web-App als Release `pi-image`, Update-Paket für laufende Pis als Release `pi-update` |
-| `ios.yml` | iPad-App als neuestes Release (nur bei Änderungen in `app/`) |
 
 Die Brücke lässt sich auch auf einem vorhandenen Raspberry Pi OS installieren: `sudo sh bridge/install-pi.sh`.
 Ihr Protokoll zeigt `journalctl -u openstorm-bridge -f`.
@@ -143,11 +133,10 @@ Ihr Protokoll zeigt `journalctl -u openstorm-bridge -f`.
 ```
 app/
   src/ev3/          EV3-Protokoll: Bytecode-Assembler, Direct Commands, Dateiübertragung, Simulator
-  src/transport/    Verbindungen: Pi-Brücke (Web Bluetooth), iOS-Plugin, Web Serial
+  src/transport/    Verbindungen: Pi-Brücke (WLAN und Web Bluetooth), Web Serial
   src/blocks/       Block-Definitionen, Werkzeugleiste, Code-Generator (App) und rbf.ts (Compiler für den EV3)
   src/runtime/      führt den erzeugten Code aus (Start/Stopp, parallele Abläufe)
   src/ui/           Editor, Geräte-Seite, Dialoge
-  ios/App/App/      Xcode-Projekt; EV3Plugin.swift ist das Bluetooth-Plugin
   test/             Vitest-Tests; ev3vm.ts bildet die EV3-VM nach (Prüfung wie die Firmware + Ausführung)
 bridge/
   openstorm_bridge.py      Webserver + WebSocket (WLAN) und BLE-Dienst ⇄ RFCOMM (EV3),

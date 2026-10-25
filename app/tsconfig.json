@@ -12,5 +12,5 @@
     "noEmit": true,
     "isolatedModules": true
   },
-  "include": ["src", "test", "vite.config.ts", "capacitor.config.ts"]
+  "include": ["src", "test", "vite.config.ts"]
 }

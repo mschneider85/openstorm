@@ -222,7 +222,6 @@ button:disabled {
   background: var(--warn);
 }
 
-.conn[data-kind='ios'] .dot,
 .conn[data-kind='bridge'] .dot,
 .conn[data-kind='serial'] .dot {
   background: var(--accent);

@@ -1,7 +1,6 @@
 import { Ev3Brick } from '../ev3/ev3brick';
 import { SimBrick } from '../ev3/simbrick';
 import { BleBridge, WsBridge, bridgeUrlFromPage, webBluetoothAvailable, type BridgeConnection, type BridgeStatus, type Ev3Device, type UpdateInfo } from '../transport/bridge';
-import { IosTransport, iosBluetoothAvailable, listPairedBricks, pairBrick } from '../transport/ios';
 import { SerialTransport, serialAvailable } from '../transport/serial';
 import type { Transport } from '../transport/transport';
 import { state, type ConnectionKind } from '../state';
@@ -50,42 +49,6 @@ async function connectWith(kind: ConnectionKind, open: () => Promise<Transport>,
     // Choosing no port in the browser dialog is not an error worth logging.
     if (!/No port selected|user cancel/i.test(message)) log(`Verbindung fehlgeschlagen: ${message}`, 'error');
   }
-}
-
-async function iosSection(): Promise<HTMLElement> {
-  const status = el('p', 'status');
-  const list = el('div', 'device-list');
-  const fill = async () => {
-    list.replaceChildren();
-    const bricks = await listPairedBricks().catch(() => []);
-    if (bricks.length === 0) list.append(el('p', 'muted', 'Kein gekoppelter EV3 gefunden.'));
-    for (const b of bricks) {
-      const row = el('div', 'device-row');
-      const btn = el('button', 'btn primary', 'Verbinden');
-      btn.addEventListener('click', () => connectWith('ios', () => IosTransport.open(b), status));
-      row.append(el('span', '', b.name), btn);
-      list.append(row);
-    }
-  };
-  await fill();
-  const pair = el('button', 'btn', 'Neuen EV3 koppeln …');
-  pair.addEventListener('click', async () => {
-    try {
-      if (await pairBrick()) await fill();
-    } catch (e) {
-      status.textContent = (e as Error).message;
-    }
-  });
-  return section(
-    'EV3 per Bluetooth',
-    list,
-    pair,
-    status,
-    hints(
-      'Am EV3: Einstellungen → Bluetooth → „Bluetooth“ und „iPhone/iPad/iPod“ einschalten.',
-      'Beim ersten Koppeln zeigt der EV3 eine Bestätigung bzw. den Code 1234.',
-    ),
-  );
 }
 
 /** Uses a bridge that holds an EV3 connection as the current brick. */
@@ -289,7 +252,7 @@ async function fillDialog(): Promise<void> {
     void showUpdate(bridgeUrl, update);
     body.append(wlan, section('Brücke aktualisieren', update));
   }
-  if (webBluetoothAvailable() && !iosBluetoothAvailable()) {
+  if (webBluetoothAvailable()) {
     body.append(
       bridgeSection('EV3 über die Brücke (Bluetooth)', 'Brücke suchen …', () => BleBridge.request(), [
         'Brücke (Raspberry Pi) einschalten und ca. 40 Sekunden warten.',
@@ -298,9 +261,8 @@ async function fillDialog(): Promise<void> {
       ]),
     );
   }
-  if (iosBluetoothAvailable()) body.append(await iosSection());
   if (serialAvailable()) body.append(serialSection());
-  if (!bridgeUrl && !iosBluetoothAvailable() && !serialAvailable() && !webBluetoothAvailable()) {
+  if (!bridgeUrl && !serialAvailable() && !webBluetoothAvailable()) {
     const p = el('p', 'muted');
     p.innerHTML =
       'Dieser Browser kann kein Bluetooth. Mit der OpenStorm-Brücke öffnest du die App im selben WLAN unter ' +

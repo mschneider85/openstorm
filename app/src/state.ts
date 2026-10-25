@@ -1,6 +1,6 @@
 import type { Brick } from './ev3/brick';
 
-export type ConnectionKind = 'none' | 'sim' | 'ios' | 'serial' | 'bridge';
+export type ConnectionKind = 'none' | 'sim' | 'serial' | 'bridge';
 
 type Listener = () => void;
 
