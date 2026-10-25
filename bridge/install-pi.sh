@@ -6,7 +6,7 @@ set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
 
 # Downloads only when something is missing, so updates stay quick.
-PACKAGES="bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon rfkill openssh-server"
+PACKAGES="bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon rfkill openssh-server dnsmasq-base"
 BLESS_VERSION=0.3.0
 if ! dpkg -s $PACKAGES >/dev/null 2>&1; then
   echo "Installiere Pakete …"

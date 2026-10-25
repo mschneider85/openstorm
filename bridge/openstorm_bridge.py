@@ -77,6 +77,8 @@ HOTSPOT_ADDRESS = "10.42.0.1"
 NETWORKS_FILE = os.environ.get("OPENSTORM_NETWORKS", "/run/openstorm/networks")
 SWITCH_DELAY_SECONDS = 2
 FALLBACK_SECONDS = 25
+HOTSPOT_ATTEMPTS = 5
+HOTSPOT_RETRY_SECONDS = 10
 
 log = logging.getLogger("openstorm")
 
@@ -710,10 +712,13 @@ class Wlan:
                 f.write(text)
         except (RuntimeError, OSError) as e:
             log.warning("WLAN: scan before opening the own network failed: %s", e)
-        try:
-            await self.run("--wait", "30", "connection", "up", HOTSPOT, timeout=45)
-        except RuntimeError as e:
-            log.warning("WLAN: own network failed: %s", e)
+        for attempt in range(HOTSPOT_ATTEMPTS):
+            try:
+                await self.run("--wait", "30", "connection", "up", HOTSPOT, timeout=45)
+                return
+            except RuntimeError as e:
+                log.warning("WLAN: opening the own network failed (attempt %d): %s", attempt + 1, e)
+                await asyncio.sleep(HOTSPOT_RETRY_SECONDS)
 
 
 # --- The bridge ---------------------------------------------------------------
