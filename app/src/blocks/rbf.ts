@@ -6,6 +6,7 @@ import {
   type ButtonName, type LedPattern,
 } from '../ev3/bytecodes';
 import { portMask } from '../ev3/command';
+import { INFRARED_CM_PER_PERCENT, TYPE_INFRARED } from '../ev3/devices';
 import { LINES, LINE_HEIGHT, SCREEN_HEIGHT, SCREEN_WIDTH, emitDraw, imageOps } from '../ev3/display';
 import { soundPath } from '../ev3/sounds';
 import { ENDLESS_TONE_MS, formatValue } from '../runtime/runner';
@@ -666,8 +667,23 @@ class Compiler {
     return this.clampNum(this.mul(this.div(this.sub(raw, min), this.sub(max, min)), num(100)), 0, 100);
   }
 
+  /** Ultrasonic or infrared sensor, decided when the program runs (the infrared proximity is turned into cm). */
   private distance(port: string, unit: string): Val {
-    return this.readSensor(port, unit === 'in' ? 1 : 0);
+    const c = this.t.code;
+    const type = this.tmp('int');
+    const mode = this.tmp('int');
+    const r = this.tmp('num');
+    const ultrasonic = c.label();
+    const end = c.label();
+    c.op([op.INPUT_DEVICE, inputDevice.GET_TYPEMODE], LAYER, lc(inputPortNumber(port as Port)), type, mode);
+    c.jump(op.JR_FALSE, ultrasonic, this.cmp(op.CP_EQ8, { ty: 'bool', op: type }, { ty: 'bool', op: lc(TYPE_INFRARED) }).op);
+    c.op(op.INPUT_READSI, LAYER, lc(inputPortNumber(port as Port)), lc(0), lc(0), r);
+    c.op(op.MULF, r, lcf(INFRARED_CM_PER_PERCENT / (unit === 'in' ? 2.54 : 1)), r);
+    c.jump(op.JR, end);
+    c.place(ultrasonic);
+    c.op(op.INPUT_READSI, LAYER, lc(inputPortNumber(port as Port)), lc(0), lc(unit === 'in' ? 1 : 0), r);
+    c.place(end);
+    return { ty: 'num', op: r };
   }
 
   private gyroOffset(port: string): Operand {

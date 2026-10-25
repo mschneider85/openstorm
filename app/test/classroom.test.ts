@@ -292,3 +292,23 @@ describe('iPad keyboard', () => {
     expect(field.getValue()).toBe(-12.25);
   });
 });
+
+describe('distance with ultrasonic or infrared sensor', () => {
+  const ws = () =>
+    workspace([start(print({ block: { type: 'ev3_distance', fields: { PORT: '4', UNIT: 'cm' } } }), line({ block: { type: 'ev3_distance', fields: { PORT: '4', UNIT: 'cm' } } }))]);
+
+  it('turns the infrared proximity into centimetres, live', async () => {
+    const { program, printed } = await live(ws(), (b) => {
+      b.types['4'] = 33;
+      b.sensorValues['4'][0] = 50;
+    });
+    await program.done;
+    expect(printed).toEqual([35]);
+  });
+
+  it('decides on the brick which sensor is connected', () => {
+    const sensor = (port: number, mode: number) => (port === 3 ? [50, 0, 0][mode] : 0);
+    expect(vm(ws(), { type: () => 33, sensor }).display).toEqual(['35']);
+    expect(vm(ws(), { type: () => 30, sensor }).display).toEqual(['50']);
+  });
+});

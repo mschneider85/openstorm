@@ -14,7 +14,7 @@ Programme laufen auf zwei Arten:
 
 - **Bilder und Klänge:** Die Bilder (Augen, Smiley, Pfeile …) und Klänge (Hupe, Sirene, Erfolg …) sind eigene, denn die von LEGO dürfen nicht mitgeliefert werden. Die Klänge lädt die App beim ersten Abspielen in den Ordner `OpenStorm` auf dem EV3.
 - **Listen auf dem EV3:** Wenn das Programm auf dem Stein läuft (exportiert auf den EV3), können Listen nur Zahlen enthalten. Texte sind dort höchstens 255 Zeichen lang, „Zeichen … von“ und „enthält“ sehen nur die ersten 127.
-- **Infrarotsensor:** Der Infrarotsensor und die Fernbedienung aus dem EV3-Home-Set haben zusätzliche Blöcke unter „Sensoren“.
+- **Infrarotsensor:** Die Abstand-Blöcke funktionieren mit dem Ultraschallsensor (Education-Set) und dem Infrarotsensor (Home-Set). Beim Infrarotsensor rechnet die App seine Nähe (0–100 %) in ungefähre Zentimeter um, 100 % sind etwa 70 cm. Für Peilsignal und Fernbedienung gibt es eigene Blöcke unter „Sensoren“.
 - **Messwerte:** „zeichne … als … auf“ zeichnet Werte als Liniendiagramm unter „Messwerte“ (neben „Ausgabe“) auf, höchstens 8 Linien. „Als Tabelle speichern“ lädt sie als CSV für Excel/Numbers herunter. Das geht nur, wenn das Programm mit ▶ Start in der App läuft.
 - **Nicht nachgebaut:** Wetter und Musik-Erweiterung.
 

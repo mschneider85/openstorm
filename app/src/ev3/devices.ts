@@ -5,6 +5,9 @@ export interface DeviceInfo {
 }
 
 export const TYPE_NONE = 126;
+export const TYPE_INFRARED = 33;
+/** The infrared sensor's proximity (0-100 %) reaches about 70 cm. */
+export const INFRARED_CM_PER_PERCENT = 0.7;
 export const TYPE_PORT_ERROR = 125;
 
 export const DEVICES: Record<number, DeviceInfo> = {

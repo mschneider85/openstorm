@@ -1,6 +1,7 @@
-import { MOTOR_PORTS, type Brick, type MotorPort, type Port } from '../ev3/brick';
+import { MOTOR_PORTS, type Brick, type MotorPort, type Port, type PortState } from '../ev3/brick';
 import type { ButtonName, LedPattern } from '../ev3/bytecodes';
 import { SCREEN_HEIGHT, SCREEN_WIDTH, imageOps, lineOps, type DrawOp, type Ink } from '../ev3/display';
+import { INFRARED_CM_PER_PERCENT, TYPE_INFRARED } from '../ev3/devices';
 import { soundMs } from '../ev3/sounds';
 
 export class StopError extends Error {
@@ -54,6 +55,8 @@ class Program {
   refs = new Map<string, number>();
   runs = new Set<Run>();
   receivers = new Map<string, { body: Body; run: Run | null }[]>();
+  /** Device types of all ports, read once when a block needs them. */
+  types: Promise<PortState[]> | null = null;
   error: unknown = null;
 
   constructor(
@@ -571,7 +574,14 @@ export class ProgramApi {
     if (event !== 'pressed') await this.waitFor(async () => !(await this.touch(port)));
   }
 
+  /** Ultrasonic or infrared sensor; the infrared sensor's proximity is turned into about the same centimetres. */
   async distance(port: Port, unit: 'cm' | 'in'): Promise<number> {
+    this.check();
+    const type = (await (this.p.types ??= this.brick.readPortStates())).find((s) => s.port === port)?.type;
+    if (type === TYPE_INFRARED) {
+      const cm = (await this.read(port, 0)) * INFRARED_CM_PER_PERCENT;
+      return unit === 'in' ? cm / 2.54 : cm;
+    }
     return this.read(port, unit === 'in' ? 1 : 0);
   }
 

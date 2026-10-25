@@ -37,7 +37,7 @@ const OPS: Record<number, Sig | Record<number, Sig>> = {
   0x8d: { 1: ['F', 'F'], 2: ['F', 'F', 'F'], 3: ['F', 'F'], 4: ['F', 'F'], 5: ['F', 'F'], 6: ['F', 'F'], 7: ['F', 'F'], 8: ['F', 'F'], 9: ['F', 'F'], 10: ['F', 'F'], 11: ['F', 'F'], 12: ['F', 'F'], 13: ['F', 'F'], 14: ['F', 'F'], 15: ['F', 'F'], 16: ['F', 'F'], 20: ['F', 'F', 'F'] },
   0x8e: ['16', '16', '16'],
   0x94: { 0: [], 1: ['8', '16', '16'], 2: ['8', 'S'] }, 0x96: [],
-  0x99: { [READY_SI]: ['8', '8', '8', '8'] },
+  0x99: { 5: ['8', '8', '8', '8'], [READY_SI]: ['8', '8', '8', '8'] },
   0x9d: ['8', '8', '8', '8', 'F'],
   0xa3: ['8', '8', '8'], 0xa4: ['8', '8', '8'], 0xa5: ['8', '8', '8'], 0xa6: ['8', '8'], 0xaa: ['8', '8'],
   0xae: ['8', '8', '8', '32', '32', '32', '8'], 0xaf: ['8', '8', '8', '32', '32', '32', '8'],
@@ -65,6 +65,8 @@ export interface FakeBrick {
   /** Sensor value for INPUT_READSI (port number as in the firmware: 0-3, motors 16-19). */
   sensor?: (port: number, mode: number) => number;
   button?: (button: number) => boolean;
+  /** Device type at a port for opINPUT_DEVICE GET_TYPEMODE (default: ultrasonic 30). */
+  type?: (port: number) => number;
   /** Values for opINPUT_DEVICE READY_SI. */
   values?: (port: number, mode: number) => number[];
 }
@@ -117,9 +119,10 @@ export class Ev3Vm {
         const code = this.image[index++];
         if (code === 0x0a) break;
         const sig = this.signature(code, index);
+        const subCode = this.image[index] & 0x3f;
         if (!Array.isArray(OPS[code])) index = this.skipParam(index, '8', true); // sub-code
         for (const p of sig) index = this.skipParam(index, p, false);
-        if (code === 0x99) {
+        if (code === 0x99 && subCode === READY_SI) {
           const count = this.decode(index);
           index = count.next;
           for (let k = 0; k < (count.value ?? 0); k++) index = this.skipParam(index, 'F', false);
@@ -260,7 +263,8 @@ export class Ev3Vm {
       case 0xc8: { const src = p(); const i = this.i8(p()); this.set8(p(), src.mem[src.off + i]); return true; }
       case 0xcc: { const v = this.i8(p()); const i = this.i8(p()); const dst = p(); dst.mem[dst.off + i] = v; return true; }
       case 0x99: {
-        sub(); p(); const port = this.i8(p()); p(); const mode = this.i8(p()); const n = this.i8(p());
+        if (sub() === 5) { p(); const port = this.i8(p()); this.set8(p(), this.brick.type?.(port) ?? 30); this.set8(p(), 0); return true; }
+        p(); const port = this.i8(p()); p(); const mode = this.i8(p()); const n = this.i8(p());
         const values = this.brick.values?.(port, mode) ?? [];
         for (let k = 0; k < n; k++) this.setF(p(), values[k] ?? 0);
         return true;
