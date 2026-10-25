@@ -8,6 +8,8 @@ export interface BrickFiles {
   write(path: string, data: Uint8Array): Promise<void>;
   read(path: string): Promise<Uint8Array>;
   list(folder: string): Promise<{ folders: string[]; files: string[] }>;
+  /** Deletes a file or an empty folder. */
+  delete(path: string): Promise<void>;
   /** Starts an .rbf program as if chosen on the brick. */
   startProgram(path: string): Promise<void>;
   stopProgram(): Promise<void>;
@@ -71,9 +73,28 @@ export class Ev3Files implements BrickFiles {
 
   /** Folders end with "/" in the brick's listing, files are "md5 size name". */
   async list(folder: string): Promise<{ folders: string[]; files: string[] }> {
-    const reply = await this.conn.system(sys.LIST_FILES, [...u16(1000), ...cstr(folder)]);
+    // reply: size (4), handle (1), text; longer listings continue in further messages.
+    let reply = await this.conn.system(sys.LIST_FILES, [...u16(CHUNK), ...cstr(folder)]);
     if (reply.status !== SYSTEM_OK && reply.status !== SYSTEM_END_OF_FILE) return { folders: [], files: [] };
-    const text = new TextDecoder().decode(reply.data.subarray(5));
+    const size = readU32(reply.data, 0);
+    const handle = reply.data[4];
+    const parts = [reply.data.subarray(5)];
+    let got = parts[0].length;
+    while (got < size && reply.status !== SYSTEM_END_OF_FILE) {
+      // reply: handle (1), text
+      reply = check(await this.conn.system(sys.CONTINUE_LIST_FILES, [handle, ...u16(CHUNK)]), 'Lesen vom EV3');
+      const part = reply.data.subarray(1);
+      if (part.length === 0) break;
+      parts.push(part);
+      got += part.length;
+    }
+    const all = new Uint8Array(got);
+    let at = 0;
+    for (const p of parts) {
+      all.set(p, at);
+      at += p.length;
+    }
+    const text = new TextDecoder().decode(all);
     const folders: string[] = [];
     const files: string[] = [];
     for (const line of text.split('\n')) {
@@ -82,6 +103,10 @@ export class Ev3Files implements BrickFiles {
       else files.push(line.split(' ').slice(2).join(' '));
     }
     return { folders, files };
+  }
+
+  async delete(path: string): Promise<void> {
+    check(await this.conn.system(sys.DELETE_FILE, cstr(path)), 'Löschen auf dem EV3');
   }
 
   async startProgram(path: string): Promise<void> {

@@ -1,103 +1,135 @@
 import {
-  currentProject, deleteProject, exportProject, importProject, listOnEv3, listProjects, loadFromEv3, newProject, openProject,
-  renameProject, showBlock, startOnEv3, transferToEv3,
+  currentProject, deleteOnEv3, deleteProject, ev3Folder, exportProject, importProject, listOnEv3, listProjects, loadFromEv3,
+  newProject, openProject, renameOnEv3, renameProject, showBlock, startOnEv3, transferToEv3, type Ev3Program,
 } from './editor';
 import { log } from './console';
+import { openConnectDialog } from './connect';
 import { state } from '../state';
 
-let dialog: HTMLDialogElement;
-let list: HTMLElement;
+/**
+ * The project window with two places: "Auf diesem Gerät" (switch, transfer, rename,
+ * delete) and "Auf dem EV3" (fetch, start, rename, delete).
+ */
 
-function render(): void {
-  list.replaceChildren();
+let dialog: HTMLDialogElement;
+let localList: HTMLElement;
+let ev3List: HTMLElement;
+let ev3Note: HTMLElement;
+let statusLine: HTMLElement;
+let place: 'local' | 'ev3' = 'local';
+/** Programs on the brick, once read (null: not read yet). */
+let onEv3: Ev3Program[] | null = null;
+let busy = false;
+
+const hasBrick = () => !!state.brick?.files;
+
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text) e.textContent = text;
+  return e;
+}
+
+function button(text: string, className: string, action: () => void | Promise<void>): HTMLButtonElement {
+  const b = el('button', className, text);
+  b.addEventListener('click', async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      await action();
+    } finally {
+      busy = false;
+    }
+  });
+  return b;
+}
+
+function status(text: string, kind: 'info' | 'error' = 'info'): void {
+  statusLine.textContent = text;
+  statusLine.classList.toggle('error', kind === 'error');
+}
+
+/** A row with the name on the left, buttons on the right and a "⋯" line with the rarer actions. */
+function row(title: string, meta: string, current: boolean, open: (() => void) | null, actions: HTMLElement[], more: HTMLElement[]): HTMLElement[] {
+  const line = el('div', `project-row${current ? ' current' : ''}`);
+  const label = el(open ? 'button' : 'div', 'project-open');
+  label.append(el('span', 'project-name', title), el('span', 'project-meta', meta));
+  if (open) label.addEventListener('click', open);
+  const extra = el('div', 'row-more');
+  extra.hidden = true;
+  extra.append(...more);
+  const toggle = el('button', 'btn ghost small more', '⋯');
+  toggle.setAttribute('aria-label', `Weitere Aktionen für ${title}`);
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.addEventListener('click', () => {
+    extra.hidden = !extra.hidden;
+    toggle.setAttribute('aria-expanded', String(!extra.hidden));
+  });
+  line.append(label, ...actions, toggle);
+  return [line, extra];
+}
+
+// --- Auf diesem iPad ------------------------------------------------------------------------
+
+function renderLocal(): void {
   const current = currentProject()?.id;
+  const folders = new Set(onEv3?.map((p) => p.folder));
+  localList.replaceChildren();
   for (const p of listProjects()) {
-    const row = document.createElement('div');
-    row.className = `project-row${p.id === current ? ' current' : ''}`;
-    const name = document.createElement('button');
-    name.className = 'project-name';
-    name.textContent = p.name;
-    name.addEventListener('click', () => {
-      openProject(p.id);
-      dialog.close();
-    });
-    const date = document.createElement('span');
-    date.className = 'muted';
-    date.textContent = new Date(p.updated).toLocaleDateString('de-DE');
-    const exportBtn = document.createElement('button');
-    exportBtn.className = 'btn ghost small';
-    exportBtn.textContent = 'Exportieren';
-    exportBtn.setAttribute('aria-expanded', 'false');
-    const rename = document.createElement('button');
-    rename.className = 'btn ghost small';
-    rename.textContent = 'Umbenennen';
-    rename.addEventListener('click', () => {
+    const onBrick = folders.has(ev3Folder(p.name));
+    const meta = [
+      p.id === current ? 'geöffnet' : '',
+      `geändert ${new Date(p.updated).toLocaleDateString('de-DE')}`,
+      onBrick ? 'auch auf dem EV3' : '',
+    ].filter(Boolean).join(' · ');
+
+    const toEv3 = button('⇩ Auf den EV3', 'btn small primary', () => transfer(p.id, p.name));
+    toEv3.disabled = !hasBrick() || state.running;
+    toEv3.title = !hasBrick() ? 'Erst einen EV3 verbinden' : 'Programm und Blöcke auf den EV3 übertragen';
+
+    const rename = button('Umbenennen', 'btn small', () => {
       const name = prompt('Neuer Name:', p.name)?.trim();
-      if (name) renameProject(p.id, name);
-      render();
+      if (!name || name === p.name) return;
+      renameProject(p.id, name);
+      status(onBrick ? `Umbenannt. Auf dem EV3 heißt es weiter „${ev3Folder(p.name)}“.` : 'Umbenannt.');
+      renderLocal();
     });
-    const remove = document.createElement('button');
-    remove.className = 'btn ghost small danger';
-    remove.textContent = 'Löschen';
-    remove.addEventListener('click', () => {
-      if (confirm(`„${p.name}“ wirklich löschen?`)) deleteProject(p.id);
-      render();
+    const save = button('Als Datei sichern', 'btn ghost small', () => share(p.id));
+    const remove = button('Löschen', 'btn ghost small danger', () => {
+      const note = onBrick ? '\n\nNur auf diesem Gerät, die Fassung auf dem EV3 bleibt.' : '';
+      if (!confirm(`„${p.name}“ löschen?${note}`)) return;
+      deleteProject(p.id);
+      status(`„${p.name}“ gelöscht.`);
+      renderLocal();
     });
-    row.append(name, date, exportBtn, rename, remove);
-    const panel = exportPanel(p.id);
-    panel.hidden = true;
-    exportBtn.addEventListener('click', () => {
-      panel.hidden = !panel.hidden;
-      exportBtn.setAttribute('aria-expanded', String(!panel.hidden));
-    });
-    list.append(row, panel);
+
+    localList.append(
+      ...row(p.name, meta, p.id === current, () => {
+        openProject(p.id);
+        dialog.close();
+      }, [toEv3, rename], [save, remove]),
+    );
   }
 }
 
-/** "Exportieren": as a file, or as a running program on the EV3 (its blocks go along). */
-function exportPanel(id: string): HTMLElement {
-  const panel = document.createElement('div');
-  panel.className = 'export-panel';
-  const file = document.createElement('button');
-  file.className = 'btn small';
-  file.textContent = 'Als Datei sichern';
-  file.addEventListener('click', () => void share(id));
-  const ev3 = document.createElement('button');
-  ev3.className = 'btn small primary';
-  ev3.textContent = '⇩ Auf den EV3';
-  const status = document.createElement('p');
-  status.className = 'muted export-status';
-  const realBrick = !!state.brick?.files;
-  ev3.disabled = !realBrick || state.running;
-  status.textContent = !realBrick
-    ? 'Für den EV3: erst einen EV3 verbinden. Dort läuft das Programm dann ohne iPad.'
-    : state.running
-      ? 'Erst das laufende Programm stoppen.'
-      : 'Auf dem EV3 läuft das Programm ohne iPad (Datei-Navigation am Stein).';
-  ev3.addEventListener('click', async () => {
-    ev3.disabled = file.disabled = true;
-    status.textContent = 'Übertrage …';
-    const result = await transferToEv3(id);
-    ev3.disabled = file.disabled = false;
-    if ('error' in result) {
-      status.textContent = result.error;
-      status.classList.add('error');
-      if (result.blockId) {
-        dialog.close();
-        showBlock(id, result.blockId);
-        log(result.error, 'error');
-      }
-      return;
-    }
-    status.classList.remove('error');
-    status.textContent = `Auf dem EV3 gespeichert: Datei-Navigation → ${result.folder}`;
-    if (confirm('Das Programm ist jetzt auf dem EV3 gespeichert. Gleich dort starten?')) {
+async function transfer(id: string, name: string): Promise<void> {
+  status(`Übertrage „${name}“ …`);
+  const result = await transferToEv3(id);
+  if ('error' in result) {
+    status(result.error, 'error');
+    if (result.blockId) {
       dialog.close();
-      await startOnEv3(result.path);
+      showBlock(id, result.blockId);
+      log(result.error, 'error');
     }
-  });
-  panel.append(file, ev3, status);
-  return panel;
+    return;
+  }
+  status(`„${name}“ ist auf dem EV3: Datei-Navigation → ${result.folder}.`);
+  await refreshEv3(false);
+  if (confirm(`„${name}“ ist jetzt auf dem EV3. Gleich dort starten?`)) {
+    dialog.close();
+    await startOnEv3(result.path);
+  }
 }
 
 async function share(id: string): Promise<void> {
@@ -118,50 +150,133 @@ async function share(id: string): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-async function showEv3Projects(target: HTMLElement): Promise<void> {
-  target.replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Lese den EV3 …' }));
-  try {
-    const folders = await listOnEv3();
-    target.replaceChildren();
-    if (folders.length === 0) {
-      target.append(Object.assign(document.createElement('p'), { className: 'muted', textContent: 'Noch keine OpenStorm-Programme auf dem EV3.' }));
-    }
-    for (const folder of folders) {
-      const row = document.createElement('div');
-      row.className = 'project-row';
-      const name = document.createElement('span');
-      name.className = 'project-name';
-      name.textContent = folder.replace(/_/g, ' ');
-      const open = document.createElement('button');
-      open.className = 'btn small';
-      open.textContent = 'Öffnen';
-      open.addEventListener('click', async () => {
-        try {
-          await loadFromEv3(folder);
-          dialog.close();
-        } catch (e) {
-          log(`Laden vom EV3 fehlgeschlagen: ${(e as Error).message}`, 'error');
-        }
-      });
-      row.append(name, open);
-      target.append(row);
-    }
-  } catch (e) {
-    target.replaceChildren(Object.assign(document.createElement('p'), { className: 'muted', textContent: (e as Error).message }));
+// --- Auf dem EV3 ------------------------------------------------------------------------------
+
+async function refreshEv3(show = true): Promise<void> {
+  if (!hasBrick()) {
+    onEv3 = null;
+    renderEv3();
+    return;
   }
+  if (show) {
+    ev3List.replaceChildren(el('p', 'muted', 'Lese den EV3 …'));
+  }
+  try {
+    onEv3 = await listOnEv3();
+  } catch (e) {
+    onEv3 = null;
+    status(`EV3 lesen fehlgeschlagen: ${(e as Error).message}`, 'error');
+  }
+  renderEv3();
+  renderLocal();
+}
+
+function renderEv3(): void {
+  ev3List.replaceChildren();
+  ev3Note.replaceChildren();
+  if (!hasBrick()) {
+    ev3Note.append(
+      el('span', 'muted', state.brick ? 'Der Simulator hat keine gespeicherten Programme. ' : 'Kein EV3 verbunden. '),
+      button('Verbinden …', 'btn small', () => {
+        dialog.close();
+        openConnectDialog();
+      }),
+    );
+    return;
+  }
+  ev3Note.append(
+    el('span', 'muted', 'Programme in der Datei-Navigation des EV3.'),
+    button('↻ Neu lesen', 'btn ghost small', () => refreshEv3()),
+  );
+  if (!onEv3) return;
+  if (onEv3.length === 0) {
+    ev3List.append(el('p', 'muted', 'Auf dem EV3 sind noch keine Programme.'));
+    return;
+  }
+  const local = new Set(listProjects().map((p) => ev3Folder(p.name)));
+  for (const prog of onEv3) {
+    const title = prog.folder.replace(/_/g, ' ');
+    const meta = prog.hasBlocks
+      ? local.has(prog.folder) ? 'mit Blöcken · auch auf diesem Gerät' : 'mit Blöcken'
+      : 'nur das Programm, ohne Blöcke (z. B. aus der LEGO-Software)';
+    const actions: HTMLElement[] = [];
+    if (prog.hasBlocks) {
+      actions.push(
+        button('⇧ Aufs Gerät', 'btn small primary', async () => {
+          try {
+            const name = await loadFromEv3(prog.folder);
+            status(`„${name}“ ist jetzt auf diesem Gerät geöffnet.`);
+            dialog.close();
+          } catch (e) {
+            status(`Holen fehlgeschlagen: ${(e as Error).message}`, 'error');
+          }
+        }),
+      );
+    }
+    const start = button('▶ Starten', 'btn small', async () => {
+      dialog.close();
+      await startOnEv3(`../prjs/${prog.folder}/${prog.program}`);
+    });
+    start.disabled = state.running;
+    actions.push(start);
+
+    const rename = button('Umbenennen', 'btn small', async () => {
+      const name = prompt('Neuer Name auf dem EV3:', title)?.trim();
+      if (!name || ev3Folder(name) === prog.folder) return;
+      status('Benenne um …');
+      try {
+        const folder = await renameOnEv3(prog.folder, name);
+        status(`Auf dem EV3 heißt es jetzt „${folder}“.`);
+      } catch (e) {
+        status(`Umbenennen fehlgeschlagen: ${(e as Error).message}`, 'error');
+      }
+      await refreshEv3(false);
+    });
+    const remove = button('Löschen', 'btn ghost small danger', async () => {
+      const note = local.has(prog.folder) ? '\n\nNur auf dem EV3, das Projekt auf diesem Gerät bleibt.' : '';
+      if (!confirm(`„${title}“ vom EV3 löschen?${note}`)) return;
+      status('Lösche …');
+      try {
+        await deleteOnEv3(prog.folder);
+        status(`„${title}“ ist vom EV3 gelöscht.`);
+      } catch (e) {
+        status(`Löschen fehlgeschlagen: ${(e as Error).message}`, 'error');
+      }
+      await refreshEv3(false);
+    });
+    rename.disabled = remove.disabled = state.running;
+    actions.push(rename);
+    ev3List.append(...row(title, meta, false, null, actions, [remove]));
+  }
+}
+
+// --- Window -------------------------------------------------------------------------------------
+
+function showPlace(p: 'local' | 'ev3'): void {
+  place = p;
+  dialog.querySelectorAll<HTMLElement>('[data-place]').forEach((e) => {
+    if (e.tagName === 'BUTTON') e.classList.toggle('active', e.dataset.place === p);
+    else e.hidden = e.dataset.place !== p;
+  });
+  if (p === 'ev3' && onEv3 === null) void refreshEv3();
 }
 
 export function initProjects(d: HTMLDialogElement): void {
   dialog = d;
-  list = d.querySelector('.project-list')!;
+  localList = d.querySelector('.local-list')!;
+  ev3List = d.querySelector('.ev3-list')!;
+  ev3Note = d.querySelector('.ev3-note')!;
+  statusLine = d.querySelector('.dialog-status')!;
   d.querySelector('.dialog-close')!.addEventListener('click', () => d.close());
+  d.querySelectorAll<HTMLButtonElement>('button[data-place]').forEach((b) =>
+    b.addEventListener('click', () => showPlace(b.dataset.place as 'local' | 'ev3')),
+  );
   d.querySelector('#project-new')!.addEventListener('click', () => {
     const name = prompt('Name des neuen Projekts:', 'Neues Projekt')?.trim();
     if (!name) return;
     newProject(name);
     dialog.close();
   });
-  d.querySelector('#ev3-list')!.addEventListener('click', () => void showEv3Projects(d.querySelector('.ev3-list')!));
   const input = d.querySelector<HTMLInputElement>('#project-import-file')!;
   d.querySelector('#project-import')!.addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
@@ -173,13 +288,18 @@ export function initProjects(d: HTMLDialogElement): void {
       log(`Projekt „${file.name}“ importiert`);
       dialog.close();
     } catch (e) {
-      log(`Import fehlgeschlagen: ${(e as Error).message}`, 'error');
+      status(`Import fehlgeschlagen: ${(e as Error).message}`, 'error');
     }
   });
 }
 
 export function openProjectsDialog(): void {
-  render();
-  dialog.querySelector('.ev3-list')!.replaceChildren();
+  onEv3 = null;
+  status('');
+  renderLocal();
+  renderEv3();
+  showPlace(place);
   dialog.showModal();
+  // Read the brick in the background, so the list can show what is already on it.
+  if (hasBrick()) void refreshEv3(place === 'ev3');
 }

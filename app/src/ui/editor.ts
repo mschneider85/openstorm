@@ -168,9 +168,13 @@ export function importProject(json: string): void {
 /** Next to every program the blocks are stored, hidden from the brick's file browser. */
 const SOURCE_FILE = '.openstorm';
 
-/** Folder and program name on the brick: ASCII letters, digits, "_" and "-". */
+/**
+ * Folder and program name on the brick: ASCII letters, digits, "_" and "-". At most
+ * 20 characters, so "../prjs/<name>/<name>.rbf" stays within the 60 characters
+ * the firmware accepts for deleting a file.
+ */
 export function brickName(name: string): string {
-  return ascii(name).replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30) || 'Programm';
+  return ascii(name).replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 20).replace(/_+$/, '') || 'Programm';
 }
 
 function brickFiles(): BrickFiles | null {
@@ -241,28 +245,77 @@ export async function startOnEv3(path: string): Promise<void> {
   }
 }
 
-/** Folders on the brick that hold an OpenStorm program with its blocks. */
-export async function listOnEv3(): Promise<string[]> {
+/** A program on the brick: its folder under ../prjs, the .rbf file, and whether its blocks are there too. */
+export interface Ev3Program {
+  folder: string;
+  program: string;
+  hasBlocks: boolean;
+}
+
+/** Folders the brick or OpenStorm use for other things. */
+const SYSTEM_FOLDERS = new Set(['OpenStorm', 'BrkProg_SAVE', 'BrkDL_SAVE', 'SD_Card']);
+
+/** Programs on the brick, OpenStorm's with their blocks as well as others (e.g. from the LEGO software). */
+export async function listOnEv3(): Promise<Ev3Program[]> {
   const files = brickFiles();
   if (!files) return [];
   const { folders } = await files.list('../prjs/');
-  const result: string[] = [];
+  const result: Ev3Program[] = [];
   for (const folder of folders) {
-    if ((await files.list(`../prjs/${folder}/`)).files.includes(SOURCE_FILE)) result.push(folder);
+    if (SYSTEM_FOLDERS.has(folder)) continue;
+    const content = (await files.list(`../prjs/${folder}/`)).files;
+    const program = content.find((f) => f.endsWith('.rbf'));
+    if (program) result.push({ folder, program, hasBlocks: content.includes(SOURCE_FILE) });
   }
-  return result;
+  return result.sort((a, b) => a.folder.localeCompare(b.folder));
+}
+
+/** The folder a project gets on the brick. */
+export function ev3Folder(projectName: string): string {
+  return brickName(projectName);
+}
+
+/** Deletes a program folder on the brick with everything in it. */
+export async function deleteOnEv3(folder: string): Promise<void> {
+  const files = brickFiles();
+  if (!files) return;
+  const dir = `../prjs/${folder}`;
+  for (const f of (await files.list(`${dir}/`)).files) await files.delete(`${dir}/${f}`);
+  await files.delete(dir);
+}
+
+/** Renames a program on the brick: copies its files into a new folder and deletes the old one. */
+export async function renameOnEv3(folder: string, newName: string): Promise<string> {
+  const files = brickFiles();
+  if (!files) return folder;
+  const target = brickName(newName);
+  if (target === folder) return folder;
+  if ((await files.list('../prjs/')).folders.includes(target)) throw new Error(`Auf dem EV3 gibt es „${target}“ schon.`);
+  for (const f of (await files.list(`../prjs/${folder}/`)).files) {
+    let data = await files.read(`../prjs/${folder}/${f}`);
+    let name = f;
+    if (f.endsWith('.rbf')) name = `${target}.rbf`;
+    if (f === SOURCE_FILE) {
+      const project = JSON.parse(new TextDecoder().decode(data)) as { name?: string };
+      project.name = newName;
+      data = new TextEncoder().encode(JSON.stringify(project));
+    }
+    await files.write(`../prjs/${target}/${name}`, data);
+  }
+  await deleteOnEv3(folder);
+  return target;
 }
 
 /** Opens the blocks stored on the brick as a project (replacing one of the same name if wanted). */
-export async function loadFromEv3(folder: string): Promise<void> {
+export async function loadFromEv3(folder: string): Promise<string> {
   const files = brickFiles();
-  if (!files) return;
+  if (!files) throw new Error('Kein EV3 verbunden');
   const json = new TextDecoder().decode(await files.read(`../prjs/${folder}/${SOURCE_FILE}`));
   const data = JSON.parse(json) as { app?: string; name?: string; workspace?: object };
   if (data.app !== 'openstorm' || !data.workspace) throw new Error('Keine OpenStorm-Daten');
   const name = data.name ?? folder;
   const existing = listProjects().find((p) => p.name === name);
-  if (existing && confirm(`„${name}“ gibt es hier schon. Durch die Fassung vom EV3 ersetzen?`)) {
+  if (existing && confirm(`„${name}“ gibt es auf diesem Gerät schon. Durch die Fassung vom EV3 ersetzen?`)) {
     save();
     storageSet(projectKey(existing.id), JSON.stringify(data.workspace));
     currentId = '';
@@ -270,7 +323,8 @@ export async function loadFromEv3(folder: string): Promise<void> {
   } else {
     newProject(existing ? `${name} (vom EV3)` : name, data.workspace);
   }
-  log(`„${name}“ vom EV3 geladen`);
+  log(`„${name}“ vom EV3 geholt`);
+  return name;
 }
 
 export function initEditor(container: HTMLElement, onChange: () => void): void {

@@ -55,19 +55,24 @@
     <dialog id="projects-dialog">
       <div class="dialog-head"><h2>Projekte</h2><button class="dialog-close" aria-label="Schließen">✕</button></div>
       <div class="dialog-body">
-        <p class="muted projects-hint">Deine Programme werden hier im Browser dieses iPads gespeichert, nicht auf dem EV3 und nicht in einem Ordner. Mit „Exportieren“ sicherst du eins als Datei oder überträgst es auf den EV3, wo es dann ohne iPad läuft.</p>
-        <div class="project-actions">
-          <button id="project-new" class="btn primary">Neues Projekt</button>
-          <button id="project-import" class="btn">Importieren …</button>
-          <input id="project-import-file" type="file" accept=".json,application/json" hidden />
+        <div class="segmented" role="tablist">
+          <button role="tab" data-place="local" class="active">Auf diesem Gerät</button>
+          <button role="tab" data-place="ev3">Auf dem EV3</button>
         </div>
-        <div class="project-list"></div>
-        <section class="ev3-projects">
-          <h3>Auf dem EV3</h3>
-          <p class="muted">Auf den EV3 exportierte Programme lassen sich hier wieder öffnen.</p>
-          <button id="ev3-list" class="btn">Programme auf dem EV3 anzeigen</button>
-          <div class="project-list ev3-list"></div>
+        <section data-place="local">
+          <div class="project-actions">
+            <button id="project-new" class="btn primary">+ Neues Projekt</button>
+            <button id="project-import" class="btn">Datei importieren …</button>
+            <input id="project-import-file" type="file" accept=".json,application/json" hidden />
+          </div>
+          <div class="project-list local-list"></div>
         </section>
+        <section data-place="ev3" hidden>
+          <div class="ev3-note"></div>
+          <div class="project-list ev3-list"></div>
+          <p class="muted projects-hint">Auf dem EV3 laufen Programme ohne Verbindung: Datei-Navigation → Ordner → Programm.</p>
+        </section>
+        <p class="dialog-status" role="status" aria-live="polite"></p>
       </div>
     </dialog>
 

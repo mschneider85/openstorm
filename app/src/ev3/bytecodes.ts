@@ -108,6 +108,7 @@ export const sys = {
   BEGIN_UPLOAD: 0x94,
   CONTINUE_UPLOAD: 0x95,
   LIST_FILES: 0x99,
+  CONTINUE_LIST_FILES: 0x9a,
   DELETE_FILE: 0x9c,
 } as const;
 export const SYSTEM_OK = 0;

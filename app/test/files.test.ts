@@ -11,6 +11,7 @@ class FakeFileBrick implements Transport {
   direct: Uint8Array[] = [];
   private writing: { path: string; data: number[]; size: number } | null = null;
   private reading: { data: Uint8Array; at: number } | null = null;
+  private listing: { data: Uint8Array; at: number } | null = null;
 
   send(frame: Uint8Array): void {
     const type = frame[4];
@@ -49,6 +50,11 @@ class FakeFileBrick implements Transport {
       const part = r.data.subarray(r.at, r.at + max);
       r.at += part.length;
       reply(r.at >= r.data.length ? 8 : 0, 2, ...part);
+    } else if (cmd === 0x9c) {
+      const path = text(0);
+      const isFolder = [...this.files.keys()].some((f) => f.startsWith(path + '/'));
+      if (isFolder || !this.files.delete(path)) return reply(isFolder ? 5 : 10);
+      reply(0);
     } else if (cmd === 0x99) {
       const folder = text(2);
       const entries = new Set<string>(['./', '../']);
@@ -57,8 +63,16 @@ class FakeFileBrick implements Transport {
         const rest = path.slice(folder.length);
         entries.add(rest.includes('/') ? rest.split('/')[0] + '/' : `${'0'.repeat(32)} ${data.length.toString(16).padStart(8, '0')} ${rest}`);
       }
-      const list = [...entries].map((e) => e + '\n').join('');
-      reply(8, ...u32(list.length), 3, ...new TextEncoder().encode(list));
+      const list = new TextEncoder().encode([...entries].map((e) => e + '\n').join(''));
+      const max = p[0] | (p[1] << 8);
+      this.listing = { data: list, at: Math.min(max, list.length) };
+      reply(list.length <= max ? 8 : 0, ...u32(list.length), 3, ...list.subarray(0, max));
+    } else if (cmd === 0x9a) {
+      const l = this.listing!;
+      const max = p[1] | (p[2] << 8);
+      const part = l.data.subarray(l.at, l.at + max);
+      l.at += part.length;
+      reply(l.at >= l.data.length ? 8 : 0, 3, ...part);
     }
   }
   close(): void {}
@@ -88,5 +102,23 @@ describe('files on the EV3', () => {
     expect([...start.subarray(7, 10)]).toEqual([0xc0, 0x08, 0x01]);
     expect(String.fromCharCode(...start.subarray(11, 26))).toBe('../prjs/A/A.rbf');
     expect([...start.subarray(-5)]).toEqual([0x03, 0x01, 0x60, 0x64, 0x00]); // PROGRAM_START slot 1, size, ip, no debug
+  });
+
+  it('deletes files', async () => {
+    const brick = new FakeFileBrick();
+    const files = new Ev3Files(new Ev3Connection(brick));
+    await files.write('../prjs/A/A.rbf', new Uint8Array([1]));
+    await expect(files.delete('../prjs/A')).rejects.toThrow(/keine Berechtigung/);
+    await files.delete('../prjs/A/A.rbf');
+    expect(brick.files.size).toBe(0);
+    await expect(files.delete('../prjs/A/A.rbf')).rejects.toThrow(/nicht gefunden/);
+  });
+
+  it('reads long folder listings in several messages', async () => {
+    const brick = new FakeFileBrick();
+    const files = new Ev3Files(new Ev3Connection(brick));
+    const names = Array.from({ length: 60 }, (_, i) => `Programm_mit_langem_Namen_${i}`);
+    for (const n of names) brick.files.set(`../prjs/${n}/${n}.rbf`, new Uint8Array([1]));
+    expect((await files.list('../prjs/')).folders.sort()).toEqual(names.sort());
   });
 });
