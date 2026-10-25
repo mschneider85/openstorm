@@ -733,7 +733,7 @@ export function defineBlocks(): void {
       },
     ]),
 
-    // --- App -------------------------------------------------------------------------
+    // --- Older OpenStorm block, no longer in the toolbox ----------------------------------
     {
       type: 'ev3_print',
       message0: 'in der App ausgeben %1',

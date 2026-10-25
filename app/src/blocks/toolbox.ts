@@ -201,12 +201,6 @@ export const toolbox: Blockly.utils.toolbox.ToolboxDefinition = {
         block('ev3_log_clear'),
       ],
     },
-    {
-      kind: 'category',
-      name: 'App',
-      colour: COLORS.app,
-      contents: [block('ev3_print', { VALUE: t('Hallo') })],
-    },
   ],
 };
 

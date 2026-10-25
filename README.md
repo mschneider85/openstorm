@@ -87,7 +87,7 @@ Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernim
 - **Am Stein starten:** *Datei-Navigation* (zweiter Reiter) → Ordner mit dem Projektnamen → Programm. Mit der Zurück-Taste stoppen.
 - **Zurückholen:** *Projekte* → **„Programme auf dem EV3 anzeigen“** → **Öffnen**. Das geht, weil OpenStorm neben jedem Programm eine unsichtbare Kopie der Blöcke ablegt (`.openstorm`).
 - Programme aus der originalen LEGO-Software lassen sich so nicht öffnen. Auf dem Stein liegt von ihnen nur das übersetzte Programm, nicht die Blöcke.
-- Auf dem EV3 hat „in der App ausgeben“ keine Wirkung. Rekursive eigene Blöcke (ein Block ruft sich selbst auf) gehen dort nicht. Eine Variable muss entweder immer Text oder immer eine Zahl enthalten.
+- Messwerte werden auf dem EV3 nicht aufgezeichnet. Rekursive eigene Blöcke (ein Block ruft sich selbst auf) gehen dort nicht. Eine Variable muss entweder immer Text oder immer eine Zahl enthalten.
 
 **Hinweise:**
 - Projekte werden im Browser gespeichert, und zwar getrennt für jede Adresse. Nutze darum immer dieselbe Adresse, also `openstorm.local`.
