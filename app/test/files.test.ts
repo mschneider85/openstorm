@@ -99,17 +99,6 @@ describe('files on the EV3', () => {
     await expect(files.read('../prjs/fehlt')).rejects.toThrow(/nicht gefunden/);
   });
 
-  it('starts a program like the brick menu does', async () => {
-    const brick = new FakeFileBrick();
-    const files = new Ev3Files(new Ev3Connection(brick));
-    await files.startProgram('../prjs/A/A.rbf');
-    const start = brick.direct[1];
-    // opFILE LOAD_IMAGE, user slot 1, path, then opPROGRAM_START
-    expect([...start.subarray(7, 10)]).toEqual([0xc0, 0x08, 0x01]);
-    expect(String.fromCharCode(...start.subarray(11, 26))).toBe('../prjs/A/A.rbf');
-    expect([...start.subarray(-5)]).toEqual([0x03, 0x01, 0x60, 0x64, 0x00]); // PROGRAM_START slot 1, size, ip, no debug
-  });
-
   it('deletes files', async () => {
     const brick = new FakeFileBrick();
     const files = new Ev3Files(new Ev3Connection(brick));

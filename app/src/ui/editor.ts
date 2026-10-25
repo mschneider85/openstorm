@@ -192,7 +192,7 @@ function brickFiles(): BrickFiles | null {
   return state.brick.files;
 }
 
-export type TransferResult = { path: string; folder: string } | { error: string; blockId?: string };
+export type TransferResult = { folder: string } | { error: string; blockId?: string };
 
 /**
  * Translates a project into an EV3 program and stores it on the brick. Its
@@ -227,7 +227,7 @@ export async function transferToEv3(id: string): Promise<TransferResult> {
     return { error: `Übertragen fehlgeschlagen: ${(e as Error).message}` };
   }
   log(`Auf dem EV3 gespeichert: Datei-Navigation → ${folder} → ${folder}`);
-  return { path, folder };
+  return { folder };
 }
 
 /** Opens a project and shows the block that could not be translated. */
@@ -237,15 +237,6 @@ export function showBlock(id: string, blockId: string): void {
   if (!block) return;
   block.select();
   workspace.centerOnBlock(block.id);
-}
-
-export async function startOnEv3(path: string): Promise<void> {
-  try {
-    await brickFiles()?.startProgram(path);
-    log('Das Programm läuft jetzt auf dem EV3. Stoppen mit der Zurück-Taste am Stein.');
-  } catch (e) {
-    log(`Starten fehlgeschlagen: ${(e as Error).message}`, 'error');
-  }
 }
 
 /** A program on the brick: its folder under ../prjs, the .rbf file, and whether its blocks are there too. */

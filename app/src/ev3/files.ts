@@ -1,6 +1,5 @@
 import { ascii } from './assembler';
-import { SYSTEM_END_OF_FILE, SYSTEM_OK, USER_SLOT, file, op, sys } from './bytecodes';
-import { Command } from './command';
+import { SYSTEM_END_OF_FILE, SYSTEM_OK, sys } from './bytecodes';
 import type { Ev3Connection, SystemReply } from './connection';
 
 /** Files on the brick and its programs. Paths are relative to /home/root/lms2012/sys. */
@@ -10,9 +9,6 @@ export interface BrickFiles {
   list(folder: string): Promise<{ folders: string[]; files: string[] }>;
   /** Deletes a file or an empty folder. */
   delete(path: string): Promise<void>;
-  /** Starts an .rbf program as if chosen on the brick. */
-  startProgram(path: string): Promise<void>;
-  stopProgram(): Promise<void>;
 }
 
 /** Bytes of file data per message; the brick accepts messages up to 1024 bytes. */
@@ -108,19 +104,5 @@ export class Ev3Files implements BrickFiles {
 
   async delete(path: string): Promise<void> {
     check(await this.conn.system(sys.DELETE_FILE, cstr(path)), 'Löschen auf dem EV3');
-  }
-
-  async startProgram(path: string): Promise<void> {
-    await this.stopProgram();
-    const cmd = new Command();
-    const size = cmd.alloc(4);
-    const ip = cmd.alloc(4);
-    cmd.op(op.FILE, file.LOAD_IMAGE).lc(USER_SLOT).lcs(path).gv(size).gv(ip);
-    cmd.op(op.PROGRAM_START).lc(USER_SLOT).gv(size).gv(ip).lc(0);
-    await this.conn.execute(cmd);
-  }
-
-  async stopProgram(): Promise<void> {
-    await this.conn.execute(new Command().op(op.PROGRAM_STOP).lc(USER_SLOT));
   }
 }

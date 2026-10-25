@@ -1,6 +1,6 @@
 import {
   currentProject, deleteOnEv3, deleteProject, ev3Folder, exportProject, importProject, listOnEv3, listProjects, loadFromEv3,
-  newProject, openProject, renameOnEv3, renameProject, showBlock, startOnEv3, transferToEv3, type Ev3Program,
+  newProject, openProject, renameOnEv3, renameProject, showBlock, transferToEv3, type Ev3Program,
 } from './editor';
 import { log } from './console';
 import { openConnectDialog } from './connect';
@@ -126,10 +126,6 @@ async function transfer(id: string, name: string): Promise<void> {
   }
   status(`„${name}“ ist auf dem EV3: Datei-Navigation → ${result.folder}.`);
   await refreshEv3(false);
-  if (confirm(`„${name}“ ist jetzt auf dem EV3. Gleich dort starten?`)) {
-    dialog.close();
-    await startOnEv3(result.path);
-  }
 }
 
 async function share(id: string): Promise<void> {
@@ -213,13 +209,6 @@ function renderEv3(): void {
         }),
       );
     }
-    const start = button('▶ Starten', 'btn small', async () => {
-      dialog.close();
-      await startOnEv3(`../prjs/${prog.folder}/${prog.program}`);
-    });
-    start.disabled = state.running;
-    actions.push(start);
-
     const rename = button('Umbenennen', 'btn small', async () => {
       const name = prompt('Neuer Name auf dem EV3:', title)?.trim();
       if (!name || ev3Folder(name) === prog.folder) return;
