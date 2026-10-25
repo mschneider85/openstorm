@@ -8,6 +8,9 @@ autoconnect=false
 mode=ap
 ssid=OpenStorm
 band=bg
+# The Pi Zero W's chip (brcmfmac) cannot open its network on every channel
+# (NetworkManager picked 13 and failed); 6 works everywhere.
+channel=6
 
 [wifi-security]
 key-mgmt=wpa-psk
@@ -15,6 +18,8 @@ proto=rsn
 pairwise=ccmp
 group=ccmp
 psk=openstorm
+# Disabled: with PMF (WPA-PSK-SHA256) the chip times out ("supplicant-timeout").
+pmf=1
 
 [ipv4]
 method=shared
