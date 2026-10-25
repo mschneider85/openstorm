@@ -8,12 +8,12 @@ interface Point {
   v: number;
 }
 
-/** Categorical colours in fixed order, the dark-surface steps (validated for colour vision deficiencies). */
-const SERIES_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+/** Categorical colours in fixed order (validated for colour vision deficiencies). */
+const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
 export const MAX_SERIES = SERIES_COLORS.length;
 const MAX_POINTS = 20000;
 
-const INK = { primary: '#f0efec', secondary: '#c3c2b7', muted: '#898781', grid: '#232823', axis: '#3a413a', surface: '#101210' };
+const INK = { primary: '#0b0b0b', secondary: '#52514e', muted: '#898781', grid: '#e2e2dc', axis: '#c8c8c0', surface: '#fcfcfa' };
 
 const series = new Map<string, Point[]>();
 /** Range of all values, kept up to date while recording (the chart must not scan 160 000 points per frame). */

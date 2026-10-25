@@ -267,7 +267,7 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
     trashcan: false,
     zoom: { controls: true, wheel: true, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
     move: { scrollbars: true, drag: true, wheel: true },
-    grid: { spacing: 24, length: 2, colour: '#232823', snap: true },
+    grid: { spacing: 24, length: 2, colour: '#dcdcd5', snap: true },
   });
 
   const projects = listProjects();
