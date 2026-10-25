@@ -218,6 +218,32 @@ main {
 #blockly {
   flex: 1;
   min-height: 0;
+  position: relative;
+}
+
+.undo-bar {
+  position: absolute;
+  top: 12px;
+  right: 24px;
+  display: flex;
+  gap: 8px;
+  z-index: 50;
+}
+
+.undo-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card);
+  font-size: 22px;
+  line-height: 1;
+  color: #2b3640;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+.undo-btn:disabled {
+  opacity: 0.35;
 }
 
 #tab-devices {

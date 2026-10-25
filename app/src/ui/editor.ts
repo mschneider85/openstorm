@@ -94,6 +94,7 @@ function load(id: string): void {
     Blockly.Events.enable();
   }
   scrollToStart();
+  workspace.clearUndo();
   onProjectChange();
 }
 
@@ -260,7 +261,7 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
     toolbox,
     theme,
     renderer: 'zelos',
-    trashcan: true,
+    trashcan: false,
     zoom: { controls: true, wheel: true, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
     move: { scrollbars: true, drag: true, wheel: true },
     grid: { spacing: 24, length: 2, colour: '#dde2e7', snap: true },
@@ -273,6 +274,7 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
   else newProject('Mein Roboter');
 
   installToolbox(workspace);
+  addUndoButtons(container);
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   workspace.addChangeListener((e) => {
@@ -294,6 +296,31 @@ function enableOrphans(): void {
 function scrollToStart(): void {
   const content = workspace.getMetricsManager().getContentMetrics();
   workspace.scroll(-content.left + 40, -content.top + 40);
+}
+
+/** Undo and redo instead of a trashcan; on an iPad there is no keyboard for it. */
+function addUndoButtons(container: HTMLElement): void {
+  const bar = document.createElement('div');
+  bar.className = 'undo-bar';
+  const make = (label: string, title: string, redo: boolean) => {
+    const b = document.createElement('button');
+    b.className = 'undo-btn';
+    b.textContent = label;
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    b.addEventListener('click', () => workspace.undo(redo));
+    bar.append(b);
+    return b;
+  };
+  const undo = make('↶', 'Rückgängig', false);
+  const redo = make('↷', 'Wiederholen', true);
+  const update = () => {
+    undo.disabled = workspace.getUndoStack().length === 0;
+    redo.disabled = workspace.getRedoStack().length === 0;
+  };
+  workspace.addChangeListener(update);
+  update();
+  container.append(bar);
 }
 
 export function resizeEditor(): void {
