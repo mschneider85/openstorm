@@ -21,7 +21,6 @@
       <button id="project-btn" class="project-btn" title="Projekte"></button>
       <div class="actions">
         <button id="connect-btn" class="conn" data-kind="none"><span class="dot"></span><span class="conn-label">Nicht verbunden</span></button>
-        <button id="transfer-btn" class="transfer" title="Programm auf den EV3 übertragen, damit er es ohne iPad ausführt">⇩ Auf EV3</button>
         <button id="run-btn" class="run">▶ Start</button>
         <button id="stop-btn" class="stop" disabled>■ Stopp</button>
       </div>
@@ -56,17 +55,16 @@
     <dialog id="projects-dialog">
       <div class="dialog-head"><h2>Projekte</h2><button class="dialog-close" aria-label="Schließen">✕</button></div>
       <div class="dialog-body">
-        <p class="muted projects-hint">Deine Programme werden hier im Browser dieses iPads gespeichert, nicht auf dem EV3 und nicht in einem Ordner. Mit „Aktuelles exportieren“ sicherst du eins als Datei.</p>
+        <p class="muted projects-hint">Deine Programme werden hier im Browser dieses iPads gespeichert, nicht auf dem EV3 und nicht in einem Ordner. Mit „Exportieren“ sicherst du eins als Datei oder überträgst es auf den EV3, wo es dann ohne iPad läuft.</p>
         <div class="project-actions">
           <button id="project-new" class="btn primary">Neues Projekt</button>
-          <button id="project-export" class="btn">Aktuelles exportieren</button>
           <button id="project-import" class="btn">Importieren …</button>
           <input id="project-import-file" type="file" accept=".json,application/json" hidden />
         </div>
         <div class="project-list"></div>
         <section class="ev3-projects">
           <h3>Auf dem EV3</h3>
-          <p class="muted">Mit „⇩ Auf EV3“ übertragene Programme lassen sich hier wieder öffnen.</p>
+          <p class="muted">Auf den EV3 exportierte Programme lassen sich hier wieder öffnen.</p>
           <button id="ev3-list" class="btn">Programme auf dem EV3 anzeigen</button>
           <div class="project-list ev3-list"></div>
         </section>

@@ -8,12 +8,12 @@ Blockprogrammierung für LEGO MINDSTORMS EV3 auf dem iPad, ohne Mac, ohne Kabel 
 
 Programme laufen auf zwei Arten:
 - **▶ Start:** Das Programm läuft in der App und steuert den EV3 live. Die gerade aktiven Blöcke leuchten auf. Das iPad muss dafür verbunden bleiben.
-- **⇩ Auf EV3:** Die App übersetzt das Programm in die Maschinensprache des EV3 (`.rbf`, wie die originale LEGO-Software) und speichert es auf dem Stein. Dort läuft es ohne iPad.
+- **Exportieren → Auf den EV3** (im Projekte-Fenster): Die App übersetzt das Programm in die Maschinensprache des EV3 (`.rbf`, wie die originale LEGO-Software) und speichert es auf dem Stein. Dort läuft es ohne iPad.
 
 ### Unterschiede zu EV3 Classroom
 
 - **Bilder und Klänge:** Die Bilder (Augen, Smiley, Pfeile …) und Klänge (Hupe, Sirene, Erfolg …) sind eigene, denn die von LEGO dürfen nicht mitgeliefert werden. Die Klänge lädt die App beim ersten Abspielen in den Ordner `OpenStorm` auf dem EV3.
-- **Listen auf dem EV3:** Wenn das Programm auf dem Stein läuft (⇩ Auf EV3), können Listen nur Zahlen enthalten. Texte sind dort höchstens 255 Zeichen lang, „Zeichen … von“ und „enthält“ sehen nur die ersten 127.
+- **Listen auf dem EV3:** Wenn das Programm auf dem Stein läuft (exportiert auf den EV3), können Listen nur Zahlen enthalten. Texte sind dort höchstens 255 Zeichen lang, „Zeichen … von“ und „enthält“ sehen nur die ersten 127.
 - **Infrarotsensor:** Der Infrarotsensor und die Fernbedienung aus dem EV3-Home-Set haben zusätzliche Blöcke unter „Sensoren“.
 - **Messwerte:** „zeichne … als … auf“ zeichnet Werte als Liniendiagramm unter „Messwerte“ (neben „Ausgabe“) auf, höchstens 8 Linien. „Als Tabelle speichern“ lädt sie als CSV für Excel/Numbers herunter. Das geht nur, wenn das Programm mit ▶ Start in der App läuft.
 - **Nicht nachgebaut:** Wetter und Musik-Erweiterung.
@@ -83,7 +83,7 @@ Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernim
 
 ### 5. Programme auf dem EV3
 
-- **Übertragen:** Oben auf **„⇩ Auf EV3“** tippen. Die App fragt danach, ob das Programm gleich starten soll.
+- **Übertragen:** Projekte-Fenster (oben auf den Projektnamen tippen) → beim Projekt **„Exportieren“** → **„⇩ Auf den EV3“**. Die App fragt danach, ob das Programm gleich starten soll. „Als Datei sichern“ speichert dagegen nur die Blöcke auf dem iPad.
 - **Am Stein starten:** *Datei-Navigation* (zweiter Reiter) → Ordner mit dem Projektnamen → Programm. Mit der Zurück-Taste stoppen.
 - **Zurückholen:** *Projekte* → **„Programme auf dem EV3 anzeigen“** → **Öffnen**. Das geht, weil OpenStorm neben jedem Programm eine unsichtbare Kopie der Blöcke ablegt (`.openstorm`).
 - Programme aus der originalen LEGO-Software lassen sich so nicht öffnen. Auf dem Stein liegt von ihnen nur das übersetzte Programm, nicht die Blöcke.

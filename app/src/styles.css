@@ -195,7 +195,6 @@ button:disabled {
 }
 
 .conn,
-.transfer,
 .run,
 .stop {
   display: flex;
@@ -209,8 +208,7 @@ button:disabled {
   white-space: nowrap;
 }
 
-.conn:hover,
-.transfer:hover:not(:disabled) {
+.conn:hover {
   border-color: var(--muted);
 }
 
@@ -960,6 +958,32 @@ dialog::backdrop {
   gap: 8px;
   border-top: 1px solid var(--line);
   padding: 6px 0;
+}
+
+.project-row {
+  flex-wrap: wrap;
+}
+
+.export-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 12px 22px;
+}
+
+.export-panel[hidden] {
+  display: none;
+}
+
+.export-status {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+}
+
+.export-status.error {
+  color: var(--danger);
 }
 
 .ev3-projects {

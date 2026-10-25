@@ -137,10 +137,24 @@ export function deleteProject(id: string): void {
 }
 
 /** Serialized program for exporting it as a file. */
-export function exportProject(): { name: string; json: string } {
-  save();
-  const data = { app: 'openstorm', version: 1, name: currentProject()?.name ?? 'Programm', workspace: Blockly.serialization.workspaces.save(workspace) };
-  return { name: data.name, json: JSON.stringify(data, null, 1) };
+/** The stored blocks of a project. */
+function projectData(id: string): object {
+  if (id === currentId) {
+    save();
+    return Blockly.serialization.workspaces.save(workspace);
+  }
+  try {
+    return JSON.parse(storageGet(projectKey(id)) ?? 'null') ?? EMPTY_PROGRAM;
+  } catch {
+    return EMPTY_PROGRAM;
+  }
+}
+
+/** A project as a file for exporting it. */
+export function exportProject(id: string): { name: string; json: string } {
+  const name = listProjects().find((p) => p.id === id)?.name ?? 'Programm';
+  const data = { app: 'openstorm', version: 1, name, workspace: projectData(id) };
+  return { name, json: JSON.stringify(data, null, 1) };
 }
 
 export function importProject(json: string): void {
@@ -171,44 +185,51 @@ function brickFiles(): BrickFiles | null {
   return state.brick.files;
 }
 
+export type TransferResult = { path: string; folder: string } | { error: string; blockId?: string };
+
 /**
- * Translates the program for the EV3 and stores it there together with its blocks.
- * Returns the program path, or null if that did not work (the reason is logged).
+ * Translates a project into an EV3 program and stores it on the brick. Its
+ * blocks go along, so the program can be opened again from the brick.
  */
-export async function transferToEv3(): Promise<string | null> {
+export async function transferToEv3(id: string): Promise<TransferResult> {
   const files = brickFiles();
-  if (!files) return null;
-  save();
+  if (!files) return { error: 'Bitte zuerst einen EV3 verbinden (der Simulator kann keine Programme speichern).' };
+  const ws = new Blockly.Workspace();
   let image: Uint8Array;
   let sounds: string[];
   try {
-    const result = compileRbf(workspace);
+    Blockly.serialization.workspaces.load(projectData(id), ws);
+    const result = compileRbf(ws);
     image = result.image;
     sounds = result.sounds;
     for (const warning of result.warnings) log(warning);
   } catch (e) {
-    const block = e instanceof RbfError && e.blockId ? workspace.getBlockById(e.blockId) : null;
-    if (block) {
-      block.select();
-      workspace.centerOnBlock(block.id);
-    }
-    log(`Übertragen nicht möglich: ${(e as Error).message}`, 'error');
-    return null;
+    return { error: `Übertragen nicht möglich: ${(e as Error).message}`, blockId: e instanceof RbfError ? e.blockId : undefined };
+  } finally {
+    ws.dispose();
   }
-  const name = currentProject()?.name ?? 'Programm';
+  const { name, json } = exportProject(id);
   const folder = brickName(name);
   const path = `../prjs/${folder}/${folder}.rbf`;
   log(`Übertrage „${name}“ auf den EV3 …`);
   try {
     await uploadSounds(files, sounds);
     await files.write(path, image);
-    await files.write(`../prjs/${folder}/${SOURCE_FILE}`, new TextEncoder().encode(exportProject().json));
+    await files.write(`../prjs/${folder}/${SOURCE_FILE}`, new TextEncoder().encode(json));
   } catch (e) {
-    log(`Übertragen fehlgeschlagen: ${(e as Error).message}`, 'error');
-    return null;
+    return { error: `Übertragen fehlgeschlagen: ${(e as Error).message}` };
   }
   log(`Auf dem EV3 gespeichert: Datei-Navigation → ${folder} → ${folder}`);
-  return path;
+  return { path, folder };
+}
+
+/** Opens a project and shows the block that could not be translated. */
+export function showBlock(id: string, blockId: string): void {
+  if (id !== currentId) openProject(id);
+  const block = workspace.getBlockById(blockId);
+  if (!block) return;
+  block.select();
+  workspace.centerOnBlock(block.id);
 }
 
 export async function startOnEv3(path: string): Promise<void> {

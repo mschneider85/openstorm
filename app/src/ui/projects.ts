@@ -1,5 +1,9 @@
-import { currentProject, deleteProject, exportProject, importProject, listOnEv3, listProjects, loadFromEv3, newProject, openProject, renameProject } from './editor';
+import {
+  currentProject, deleteProject, exportProject, importProject, listOnEv3, listProjects, loadFromEv3, newProject, openProject,
+  renameProject, showBlock, startOnEv3, transferToEv3,
+} from './editor';
 import { log } from './console';
+import { state } from '../state';
 
 let dialog: HTMLDialogElement;
 let list: HTMLElement;
@@ -20,6 +24,10 @@ function render(): void {
     const date = document.createElement('span');
     date.className = 'muted';
     date.textContent = new Date(p.updated).toLocaleDateString('de-DE');
+    const exportBtn = document.createElement('button');
+    exportBtn.className = 'btn ghost small';
+    exportBtn.textContent = 'Exportieren';
+    exportBtn.setAttribute('aria-expanded', 'false');
     const rename = document.createElement('button');
     rename.className = 'btn ghost small';
     rename.textContent = 'Umbenennen';
@@ -35,13 +43,65 @@ function render(): void {
       if (confirm(`„${p.name}“ wirklich löschen?`)) deleteProject(p.id);
       render();
     });
-    row.append(name, date, rename, remove);
-    list.append(row);
+    row.append(name, date, exportBtn, rename, remove);
+    const panel = exportPanel(p.id);
+    panel.hidden = true;
+    exportBtn.addEventListener('click', () => {
+      panel.hidden = !panel.hidden;
+      exportBtn.setAttribute('aria-expanded', String(!panel.hidden));
+    });
+    list.append(row, panel);
   }
 }
 
-async function share(): Promise<void> {
-  const { name, json } = exportProject();
+/** "Exportieren": as a file, or as a running program on the EV3 (its blocks go along). */
+function exportPanel(id: string): HTMLElement {
+  const panel = document.createElement('div');
+  panel.className = 'export-panel';
+  const file = document.createElement('button');
+  file.className = 'btn small';
+  file.textContent = 'Als Datei sichern';
+  file.addEventListener('click', () => void share(id));
+  const ev3 = document.createElement('button');
+  ev3.className = 'btn small primary';
+  ev3.textContent = '⇩ Auf den EV3';
+  const status = document.createElement('p');
+  status.className = 'muted export-status';
+  const realBrick = !!state.brick?.files;
+  ev3.disabled = !realBrick || state.running;
+  status.textContent = !realBrick
+    ? 'Für den EV3: erst einen EV3 verbinden. Dort läuft das Programm dann ohne iPad.'
+    : state.running
+      ? 'Erst das laufende Programm stoppen.'
+      : 'Auf dem EV3 läuft das Programm ohne iPad (Datei-Navigation am Stein).';
+  ev3.addEventListener('click', async () => {
+    ev3.disabled = file.disabled = true;
+    status.textContent = 'Übertrage …';
+    const result = await transferToEv3(id);
+    ev3.disabled = file.disabled = false;
+    if ('error' in result) {
+      status.textContent = result.error;
+      status.classList.add('error');
+      if (result.blockId) {
+        dialog.close();
+        showBlock(id, result.blockId);
+        log(result.error, 'error');
+      }
+      return;
+    }
+    status.classList.remove('error');
+    status.textContent = `Auf dem EV3 gespeichert: Datei-Navigation → ${result.folder}`;
+    if (confirm('Das Programm ist jetzt auf dem EV3 gespeichert. Gleich dort starten?')) {
+      dialog.close();
+      await startOnEv3(result.path);
+    }
+  });
+  panel.append(file, ev3, status);
+  return panel;
+}
+
+async function share(id: string): Promise<void> {
+  const { name, json } = exportProject(id);
   const file = new File([json], `${name.replace(/[^\wäöüÄÖÜß -]/g, '_')}.openstorm.json`, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
     try {
@@ -101,7 +161,6 @@ export function initProjects(d: HTMLDialogElement): void {
     newProject(name);
     dialog.close();
   });
-  d.querySelector('#project-export')!.addEventListener('click', () => void share());
   d.querySelector('#ev3-list')!.addEventListener('click', () => void showEv3Projects(d.querySelector('.ev3-list')!));
   const input = d.querySelector<HTMLInputElement>('#project-import-file')!;
   d.querySelector('#project-import')!.addEventListener('click', () => input.click());
