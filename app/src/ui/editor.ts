@@ -2,6 +2,7 @@ import * as Blockly from 'blockly/core';
 import 'blockly/blocks';
 import * as De from 'blockly/msg/de';
 import { defineBlocks } from '../blocks/definitions';
+import { dropUnknownBlocks } from '../blocks/prune';
 import { HAT_TYPES, compile } from '../blocks/generator';
 import { RbfError, compileRbf } from '../blocks/rbf';
 import { ascii } from '../ev3/assembler';
@@ -83,10 +84,15 @@ function load(id: string): void {
   }
   currentId = id;
   storageSet(CURRENT_KEY, id);
+  const dropped = dropUnknownBlocks(data);
+  if (dropped.length) log(`Blöcke aus einer älteren Version entfernt: ${[...new Set(dropped)].join(', ')}`, 'error');
   Blockly.Events.disable();
   try {
     workspace.clear();
     Blockly.serialization.workspaces.load(data, workspace);
+  } catch (e) {
+    // A broken project must not keep the app from starting.
+    log(`Projekt nur teilweise geladen: ${(e as Error).message}`, 'error');
   } finally {
     Blockly.Events.enable();
   }
