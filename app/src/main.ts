@@ -1,6 +1,6 @@
 import './styles.css';
 import { state } from './state';
-import { clearLog, showView } from './ui/console';
+import { clearLog, log, showView } from './ui/console';
 import { clearValues, downloadCsv, initDatalog } from './ui/datalog';
 import { autoConnect, initConnect, openConnectDialog } from './ui/connect';
 import { initDevices, setDevicesVisible } from './ui/devices';
@@ -9,6 +9,11 @@ import { showInstallHint } from './ui/install-hint';
 import { initProjects, openProjectsDialog } from './ui/projects';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
+
+// Errors show up in the output, as there are no developer tools on the iPad.
+const where = (e: ErrorEvent) => (e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno}:${e.colno})` : '');
+window.addEventListener('error', (e) => log(`Fehler: ${e.message}${where(e)}`, 'error'));
+window.addEventListener('unhandledrejection', (e) => log(`Fehler: ${(e.reason as Error)?.message ?? e.reason}`, 'error'));
 
 const projectBtn = $('#project-btn');
 const updateProjectName = () => {
