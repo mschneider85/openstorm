@@ -341,9 +341,9 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
     // Edit numbers and texts right in the block (with the number keyboard), not in a dialog.
     modalInputs: false,
     trashcan: false,
-    zoom: { controls: true, wheel: true, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
+    zoom: { controls: false, wheel: true, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
     move: { scrollbars: true, drag: true, wheel: true },
-    grid: { spacing: 24, length: 2, colour: '#dcdcd5', snap: true },
+    grid: { spacing: 24, length: 2, colour: '#dfe3e8', snap: true },
   });
 
   const projects = listProjects();

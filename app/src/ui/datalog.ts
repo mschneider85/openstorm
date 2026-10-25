@@ -13,7 +13,7 @@ const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#
 export const MAX_SERIES = SERIES_COLORS.length;
 const MAX_POINTS = 20000;
 
-const INK = { primary: '#0b0b0b', secondary: '#52514e', muted: '#898781', grid: '#e2e2dc', axis: '#c8c8c0', surface: '#fcfcfa' };
+const INK = { primary: '#0b0b0b', secondary: '#52514e', muted: '#898781', grid: '#e6e9ed', axis: '#cdd3da', surface: '#ffffff' };
 
 const series = new Map<string, Point[]>();
 /** Range of all values, kept up to date while recording (the chart must not scan 160 000 points per frame). */

@@ -12,6 +12,23 @@ const block = (type: string, inputs?: Record<string, object>, fields?: Record<st
 });
 const label = (text: string) => ({ kind: 'label', text });
 
+/**
+ * Categories with a small colour square instead of Blockly's coloured edge, and a
+ * light tint of their colour when selected (see .blocklyToolboxCategory in styles.css).
+ */
+class SwatchCategory extends Blockly.ToolboxCategory {
+  protected override addColourBorder_(colour: string): void {
+    this.rowDiv_?.style.setProperty('--cat', colour);
+  }
+
+  override setSelected(isSelected: boolean): void {
+    super.setSelected(isSelected);
+    if (this.rowDiv_) this.rowDiv_.style.backgroundColor = '';
+  }
+}
+
+Blockly.registry.register(Blockly.registry.Type.TOOLBOX_ITEM, Blockly.ToolboxCategory.registrationName, SwatchCategory, true);
+
 /** The categories and their order follow LEGO Education EV3 Classroom. */
 export const toolbox: Blockly.utils.toolbox.ToolboxDefinition = {
   kind: 'categoryToolbox',
@@ -274,17 +291,17 @@ export const theme = Blockly.Theme.defineTheme('openstorm', {
     procedure_blocks: { colourPrimary: COLORS.myBlocks },
   } as unknown as Record<string, Blockly.Theme.BlockStyle>,
   componentStyles: {
-    workspaceBackgroundColour: '#f7f7f4',
-    toolboxBackgroundColour: '#fcfcfa',
-    toolboxForegroundColour: '#1b1d1b',
-    flyoutBackgroundColour: '#f0f0eb',
-    flyoutForegroundColour: '#1b1d1b',
-    flyoutOpacity: 0.97,
-    scrollbarColour: '#c8c8c0',
+    workspaceBackgroundColour: '#ffffff',
+    toolboxBackgroundColour: '#ffffff',
+    toolboxForegroundColour: '#1d2329',
+    flyoutBackgroundColour: '#f4f5f7',
+    flyoutForegroundColour: '#1d2329',
+    flyoutOpacity: 0.98,
+    scrollbarColour: '#c9cfd6',
     scrollbarOpacity: 0.8,
     insertionMarkerColour: '#000000',
     insertionMarkerOpacity: 0.2,
   },
-  fontStyle: { family: 'system-ui, -apple-system, sans-serif', weight: '600', size: 12 },
+  fontStyle: { family: '-apple-system, system-ui, Inter, sans-serif', weight: '600', size: 12 },
   startHats: true,
 });
