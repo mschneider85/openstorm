@@ -23,7 +23,7 @@ class FakeNmcli:
     """Profiles, the active one and the networks in range, answering like `nmcli -t`."""
 
     def __init__(self, in_range=("Zuhause", "Nachbar:5G")):
-        self.profiles = {ob.HOTSPOT: {"ssid": ob.HOTSPOT_SSID, "mode": "ap", "psk": "openstorm"}}
+        self.profiles = {ob.HOTSPOT: {"ssid": ob.HOTSPOT_SSID, "mode": "ap", "psk": ""}}
         self.active = ""
         self.in_range = list(in_range)
         self.passwords = {}  # ssid -> the right password

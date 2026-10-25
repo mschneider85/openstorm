@@ -44,7 +44,7 @@ Auf dem iPad muss **keine App installiert** werden.
 5. SD-Karte in den Pi stecken und Strom anschließen, über eine Powerbank oder den USB-Port des EV3.
    Nach etwa 1 Minute ist die Brücke bereit.
 6. **WLAN einrichten:**
-   - Beim ersten Start kennt der Pi noch kein WLAN. Er öffnet deshalb sein eigenes WLAN **„OpenStorm“** (Passwort `openstorm`).
+   - Beim ersten Start kennt der Pi noch kein WLAN. Er öffnet deshalb sein eigenes, offenes WLAN **„OpenStorm“** (ohne Passwort; es dient nur zum Einrichten).
    - Das iPad in *Einstellungen → WLAN* mit „OpenStorm“ verbinden. Die Einrichtungsseite öffnet sich von selbst, sonst in Safari **http://10.42.0.1/wlan** öffnen.
    - Dein WLAN auswählen, Passwort eingeben, **„Verbinden“**. Der Pi wechselt in dein WLAN, das iPad danach auch wieder.
    - Klappt es nicht (z. B. falsches Passwort), öffnet der Pi nach etwa einer Minute wieder „OpenStorm“, und die Seite zeigt den Fehler.

@@ -60,6 +60,12 @@ fi
 for attempt in 1 2 3 4 5; do
   if run nmcli --wait 30 connection up OpenStorm-Hotspot; then
     say "Eigenes WLAN \"OpenStorm\" offen (http://10.42.0.1)"
+    # Who tried to join in the next minutes, for when a device cannot get in.
+    systemd-run --no-block --unit=openstorm-wlan-log /bin/sh -c "sleep 240; {
+      echo; echo \"\$(date '+%H:%M:%S') Anmeldungen am eigenen WLAN:\"
+      journalctl -b -u NetworkManager -u wpa_supplicant --no-pager -n 80 | sed 's/^/    /'
+      journalctl -b -k --no-pager | grep -i brcm | tail -n 20 | sed 's/^/    /'
+    } >> '$LOG'" >/dev/null 2>&1 || true
     exit 0
   fi
   say "Versuch $attempt fehlgeschlagen"
