@@ -287,6 +287,7 @@ export const theme = Blockly.Theme.defineTheme('openstorm', {
     flyoutForegroundColour: '#1b1d1b',
     flyoutOpacity: 0.97,
     scrollbarColour: '#c8c8c0',
+    scrollbarOpacity: 0.8,
     insertionMarkerColour: '#000000',
     insertionMarkerOpacity: 0.2,
   },

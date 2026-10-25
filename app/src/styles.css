@@ -1039,6 +1039,35 @@ dialog::backdrop {
 }
 
 
+/* Thin scrollbars in the colours of the layout. */
+.blocklyScrollbarHandle {
+  rx: 4px;
+  ry: 4px;
+}
+
+.blocklyScrollbarHandle:hover {
+  fill: var(--muted);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @media (max-width: 760px) {
   .device-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

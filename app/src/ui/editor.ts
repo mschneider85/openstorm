@@ -260,6 +260,8 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
   defineBlocks();
   onProjectChange = onChange;
 
+  // Blockly uses 25 px wide scrollbars on touch screens; the workspace is moved by dragging anyway.
+  Blockly.Scrollbar.scrollbarThickness = 10;
   workspace = Blockly.inject(container, {
     toolbox,
     theme,
