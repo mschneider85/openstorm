@@ -9,6 +9,7 @@ export const DIRECT_REPLY_ERROR = 0x04;
 export const op = {
   PROGRAM_STOP: 0x02,
   PROGRAM_START: 0x03,
+  OBJECT_STOP: 0x04,
   OBJECT_START: 0x05,
   OBJECT_END: 0x0a,
   SLEEP: 0x0b,
@@ -38,6 +39,7 @@ export const op = {
   CP_LTEQF: 0x57,
   CP_GTEQF: 0x5b,
   SELECTF: 0x5f,
+  CP_LTEQ8: 0x54,
   STRINGS: 0x7d,
   TIMER_WAIT: 0x85,
   TIMER_READY: 0x86,
@@ -47,6 +49,11 @@ export const op = {
   SOUND_READY: 0x96,
   OUTPUT_READY: 0xaa,
   FILE: 0xc0,
+  ARRAY: 0xc1,
+  ARRAY_WRITE: 0xc2,
+  ARRAY_READ: 0xc3,
+  READ8: 0xc8,
+  WRITE8: 0xcc,
   UI_READ: 0x81,
   UI_WRITE: 0x82,
   UI_BUTTON: 0x83,
@@ -72,15 +79,24 @@ export const op = {
 export const uiRead = { GET_VBATT: 1, GET_LBATT: 18 } as const;
 export const uiWrite = { LED: 27 } as const;
 export const uiButton = { PRESSED: 9 } as const;
-export const uiDraw = { UPDATE: 0, TEXT: 5, FILLRECT: 9, SELECT_FONT: 17, FILLWINDOW: 19 } as const;
-export const sound = { BREAK: 0, TONE: 1 } as const;
-export const inputDevice = { GET_TYPEMODE: 5, GET_NAME: 21 } as const;
+export const uiDraw = {
+  UPDATE: 0, PIXEL: 2, LINE: 3, CIRCLE: 4, TEXT: 5, FILLRECT: 9, RECT: 10, INVERSERECT: 16, SELECT_FONT: 17,
+  FILLWINDOW: 19, FILLCIRCLE: 24,
+} as const;
+export const sound = { BREAK: 0, TONE: 1, PLAY: 2 } as const;
+export const inputDevice = { GET_TYPEMODE: 5, GET_NAME: 21, READY_SI: 29 } as const;
+export const array = { CREATEF: 4, RESIZE: 5, SIZE: 12 } as const;
 export const comGet = { GET_BRICKNAME: 13 } as const;
-export const math = { EXP: 1, MOD: 2, FLOOR: 3, CEIL: 4, ROUND: 5, ABS: 6, NEGATE: 7, SQRT: 8, LOG: 9, LN: 10, POW: 20 } as const;
-export const strings = { ADD: 2, COMPARE: 3, DUPLICATE: 5, VALUE_FORMATTED: 11 } as const;
+export const math = {
+  EXP: 1, MOD: 2, FLOOR: 3, CEIL: 4, ROUND: 5, ABS: 6, NEGATE: 7, SQRT: 8, LOG: 9, LN: 10,
+  SIN: 11, COS: 12, TAN: 13, ASIN: 14, ACOS: 15, ATAN: 16, POW: 20,
+} as const;
+export const strings = { GET_SIZE: 1, ADD: 2, COMPARE: 3, DUPLICATE: 5, VALUE_FORMATTED: 11 } as const;
 export const file = { LOAD_IMAGE: 8 } as const;
 /** Program slot for user programs (opFILE LOAD_IMAGE, opPROGRAM_START/STOP). */
 export const USER_SLOT = 1;
+/** Only valid for opPROGRAM_STOP: the program that executes the instruction. */
+export const CURRENT_SLOT = -1;
 
 // System commands (file transfer), see c_com.h.
 export const SYSTEM_COMMAND_REPLY = 0x01;

@@ -13,6 +13,8 @@ import {
   type LedPattern,
 } from './bytecodes';
 import { ALL_PORTS, inputPortNumber, type Brick, type MotorPort, type Port, type PortState } from './brick';
+import { emitDraw, type DrawOp } from './display';
+import { soundPath, uploadSounds } from './sounds';
 import { Command, portMask } from './command';
 import { Ev3Connection } from './connection';
 import { Ev3Files } from './files';
@@ -63,6 +65,14 @@ export class Ev3Brick implements Brick {
     const nos = portMask(ports);
     await this.run((c) => {
       c.op(op.OUTPUT_SPEED).lc(LAYER).lc(nos).lc(clampSpeed(speed));
+      c.op(op.OUTPUT_START).lc(LAYER).lc(nos);
+    });
+  }
+
+  async motorPower(ports: MotorPort[], power: number): Promise<void> {
+    const nos = portMask(ports);
+    await this.run((c) => {
+      c.op(op.OUTPUT_POWER).lc(LAYER).lc(nos).lc(clampSpeed(power));
       c.op(op.OUTPUT_START).lc(LAYER).lc(nos);
     });
   }
@@ -134,6 +144,16 @@ export class Ev3Brick implements Brick {
     return offsets.map((o) => reply.getFloat32(o, true));
   }
 
+  async readPortValues(port: Port, mode: number, count: number): Promise<number[]> {
+    const offsets: number[] = [];
+    const reply = await this.run((c) => {
+      for (let k = 0; k < count; k++) offsets.push(c.alloc(4));
+      c.op(op.INPUT_DEVICE, inputDevice.READY_SI).lc(LAYER).lc(inputPortNumber(port)).lc(0).lc(mode).lc(count);
+      for (const o of offsets) c.gv(o);
+    });
+    return offsets.map((o) => reply.getFloat32(o, true));
+  }
+
   async readPortStates(): Promise<PortState[]> {
     const offsets: number[] = [];
     const reply = await this.run((c) => {
@@ -154,6 +174,16 @@ export class Ev3Brick implements Brick {
     await this.run((c) =>
       c.op(op.SOUND, sound.TONE).lc(clamp(volume, 0, 100)).lc(clamp(frequency, 250, 10000)).lc(Math.max(0, ms)),
     );
+  }
+
+  private soundsOnBrick = new Set<string>();
+
+  async playSound(id: string, volume: number): Promise<void> {
+    if (!this.soundsOnBrick.has(id)) {
+      await uploadSounds(this.files, [id]);
+      this.soundsOnBrick.add(id);
+    }
+    await this.run((c) => c.op(op.SOUND, sound.PLAY).lc(clamp(volume, 0, 100)).lcs(soundPath(id)));
   }
 
   async stopSound(): Promise<void> {
@@ -188,6 +218,22 @@ export class Ev3Brick implements Brick {
       c.op(op.UI_DRAW, uiDraw.FILLWINDOW).lc(0).lc(0).lc(0);
       c.op(op.UI_DRAW, uiDraw.UPDATE);
     });
+  }
+
+  async draw(ops: DrawOp[]): Promise<void> {
+    // Images consist of many instructions; split them into commands that fit into one message.
+    let cmd = new Command();
+    const commands = [cmd];
+    emitDraw(ops, (sub, args) => {
+      if (cmd.size > 800) commands.push((cmd = new Command()));
+      cmd.op(op.UI_DRAW, sub);
+      for (const a of args) {
+        if (typeof a === 'string') cmd.lcs(a);
+        else cmd.lc(a);
+      }
+    });
+    cmd.op(op.UI_DRAW, uiDraw.UPDATE);
+    for (const c of commands) await this.conn.execute(c);
   }
 
   async battery(): Promise<{ voltage: number; percent: number }> {

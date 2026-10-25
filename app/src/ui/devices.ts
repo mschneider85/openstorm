@@ -2,6 +2,7 @@ import { MOTOR_PORTS, type MotorPort, type Port, type PortState } from '../ev3/b
 import type { ButtonName, LedPattern } from '../ev3/bytecodes';
 import { COLOR_CSS, COLOR_NAMES, DEVICES, TYPE_NONE, deviceName, isMotorType } from '../ev3/devices';
 import { SimBrick } from '../ev3/simbrick';
+import { SCREEN_HEIGHT, SCREEN_WIDTH, renderScreen } from '../ev3/display';
 import { state } from '../state';
 import { log } from './console';
 
@@ -201,7 +202,12 @@ function brickCard(): HTMLElement {
 
 function simBrickPanel(sim: SimBrick): HTMLElement {
   const box = el('div', 'sim-brick');
-  const screen = el('pre', 'ev3-screen');
+  const screen = document.createElement('canvas');
+  screen.className = 'ev3-screen';
+  screen.width = SCREEN_WIDTH;
+  screen.height = SCREEN_HEIGHT;
+  const ctx = screen.getContext('2d');
+  let shown = -1;
   const led = el('div', 'ev3-led');
   const buttons = el('div', 'ev3-buttons');
   const names: [ButtonName, string][] = [['up', '▲'], ['left', '◀'], ['enter', '●'], ['right', '▶'], ['down', '▼']];
@@ -209,7 +215,10 @@ function simBrickPanel(sim: SimBrick): HTMLElement {
     buttons.append(holdButton(label, `ev3-btn ev3-btn-${name}`, () => sim.pressedButtons.add(name), () => sim.pressedButtons.delete(name)));
   }
   const render = () => {
-    screen.textContent = sim.display.join('\n');
+    if (ctx && shown !== sim.screenVersion) {
+      renderScreen(ctx, sim.screen);
+      shown = sim.screenVersion;
+    }
     led.dataset.led = sim.led;
   };
   render();

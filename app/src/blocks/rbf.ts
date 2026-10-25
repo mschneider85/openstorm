@@ -1,17 +1,24 @@
 import * as Blockly from 'blockly/core';
 import { CodeBuffer, buildImage, gv, lc, lcf, lcs, lv, type Label, type Operand } from '../ev3/assembler';
-import { inputPortNumber, type Port } from '../ev3/brick';
-import { BUTTONS, LED_PATTERNS, math, op, sound, strings, uiButton, uiDraw, uiWrite, type ButtonName, type LedPattern } from '../ev3/bytecodes';
+import { inputPortNumber, type MotorPort, type Port } from '../ev3/brick';
+import {
+  BUTTONS, CURRENT_SLOT, LED_PATTERNS, array, inputDevice, math, op, sound, strings, uiButton, uiDraw, uiWrite,
+  type ButtonName, type LedPattern,
+} from '../ev3/bytecodes';
 import { portMask } from '../ev3/command';
-import { formatValue } from '../runtime/runner';
+import { LINES, LINE_HEIGHT, SCREEN_HEIGHT, SCREEN_WIDTH, emitDraw, imageOps } from '../ev3/display';
+import { soundPath } from '../ev3/sounds';
+import { ENDLESS_TONE_MS, formatValue } from '../runtime/runner';
+import { HAT_TYPES } from './generator';
 
 /**
  * Compiles a workspace into an EV3 program (.rbf) that runs on the brick by
- * itself. Each start block becomes a VMTHREAD; "Eigene Blöcke" are inlined.
+ * itself. Object 1 sets everything up and starts one VMTHREAD per event block;
+ * "Meine Blöcke" are inlined.
  *
  * Values are floats (DATAF), booleans DATA8 and texts fixed-size string buffers.
- * Everything is 4-byte aligned, as the firmware validator requires for 32 bit
- * variables.
+ * Lists are float arrays. Everything is 4-byte aligned, as the firmware validator
+ * requires for 32 bit variables.
  */
 
 type Ty = 'num' | 'bool' | 'str';
@@ -32,8 +39,19 @@ export class RbfError extends Error {
 /** Bytes per text value; joined texts must stay below this. */
 const STR = 256;
 const LAYER = lc(0);
-const LINE_HEIGHT = 16;
-const SCREEN_WIDTH = 178;
+/** Line height of the older block "Anzeige: schreibe … in Zeile" (8 lines). */
+const OLD_LINE_HEIGHT = 16;
+/** opREAD8/opWRITE8 take a DATA8 index, so only the first 127 characters of a text are reachable. */
+const MAX_INDEX = 126;
+
+/** 8 bit integer opcodes, used for text positions. */
+const int8 = {
+  ADD: 0x10,
+  SUB: 0x14,
+  CP_LT: 0x44,
+  CP_GT: 0x48,
+  MOVE16_8: 0x34,
+} as const;
 
 const align4 = (n: number) => (n + 3) & ~3;
 
@@ -46,6 +64,8 @@ class Memory {
   }
 }
 
+type HatKind = 'start' | 'when' | 'message';
+
 class Thread {
   code = new CodeBuffer();
   locals = new Memory();
@@ -54,17 +74,28 @@ class Thread {
   scope: Map<string, Val> | null = null;
   returns: { label: Label; result?: Val }[] = [];
   calls: string[] = [];
+  /** Where "stoppe diesen Ablauf" jumps to. */
+  end: Label = this.code.label();
+
+  constructor(
+    readonly id: number,
+    readonly kind: HatKind,
+  ) {}
 }
 
 const num = (k: number): Val => ({ ty: 'num', op: lcf(k), k });
 const bool = (k: boolean): Val => ({ ty: 'bool', op: lc(k ? 1 : 0), k });
 const str = (k: string): Val => ({ ty: 'str', op: lcs(k), k });
 const isNum = (v: Val): v is Val & { k: number } => typeof v.k === 'number';
+const isStr = (v: Val): v is Val & { k: string } => typeof v.k === 'string';
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+const NUMERIC = /^\s*-?\d+([.,]\d+)?\s*$/;
 
 export interface RbfResult {
   image: Uint8Array;
   warnings: string[];
+  /** Sounds the program plays; they have to be on the brick (see sounds.ts). */
+  sounds: string[];
 }
 
 export function compileRbf(workspace: Blockly.Workspace): RbfResult {
@@ -76,30 +107,92 @@ class Compiler {
   private variables = new Map<string, Val>();
   private varTypes = new Map<string, Ty>();
   private warnings = new Set<string>();
+  private sounds = new Set<string>();
+  /** Global state with its start value, set up by object 1. */
+  private state = new Map<string, { op: Operand; ty: 'num' | 'bool'; init: number }>();
+  private lists = new Map<string, { handle: Operand; length: Operand }>();
+  private hats: { block: Blockly.Block; id: number; kind: HatKind }[] = [];
+  private receivers = new Map<string, number[]>();
   private timerStart = this.globals.alloc(4);
-  private t = new Thread();
+  private t = new Thread(0, 'start');
 
   constructor(private workspace: Blockly.Workspace) {}
 
   compile(): RbfResult {
-    const starts = this.workspace.getTopBlocks(true).filter((b) => b.type === 'ev3_start' && b.isEnabled());
-    if (starts.length === 0) throw new RbfError('Kein „Programmstart“-Block gefunden.');
+    const tops = this.workspace.getTopBlocks(true).filter((b) => HAT_TYPES.includes(b.type) && b.isEnabled());
+    if (tops.length === 0) throw new RbfError('Kein Ereignisblock wie „Wenn Programm startet“ gefunden.');
     this.inferVariableTypes();
-    const usesDisplay = this.workspace.getAllBlocks(false).some((b) => b.type.startsWith('ev3_display') && b.isEnabled());
+    this.checkLists();
 
-    const threads = starts.map((start, i) => {
-      this.t = new Thread();
-      const c = this.t.code;
-      if (i === 0) {
-        c.op(op.TIMER_READ, gv(this.timerStart));
-        if (usesDisplay) this.clearDisplay();
-        for (let id = 2; id <= starts.length; id++) c.op(op.OBJECT_START, lc(id));
-      }
-      this.statements(start.getNextBlock());
-      c.op(op.OBJECT_END);
-      return { code: c, localBytes: align4(this.t.locals.size) };
-    });
-    return { image: buildImage(align4(this.globals.size), threads), warnings: [...this.warnings] };
+    this.hats = tops.map((block, i) => ({
+      block,
+      id: i + 2,
+      kind: block.type === 'ev3_start' ? 'start' : block.type === 'ev3_when_message' ? 'message' : 'when',
+    }));
+    for (const hat of this.hats) {
+      if (hat.kind !== 'message') continue;
+      const name = hat.block.getFieldValue('MESSAGE') as string;
+      this.receivers.set(name, [...(this.receivers.get(name) ?? []), hat.id]);
+    }
+
+    const objects = this.hats.map((hat) => this.hatObject(hat));
+    return {
+      image: buildImage(align4(this.globals.size), [this.initObject(), ...objects]),
+      warnings: [...this.warnings],
+      sounds: [...this.sounds],
+    };
+  }
+
+  /** Object 1: start values, then start all stacks. */
+  private initObject(): { code: CodeBuffer; localBytes: number } {
+    this.t = new Thread(1, 'start');
+    const c = this.t.code;
+    c.op(op.TIMER_READ, gv(this.timerStart));
+    for (const s of this.state.values()) {
+      if (s.ty === 'num') c.op(op.MOVEF_F, lcf(s.init), s.op);
+      else c.op(op.MOVE8_8, lc(s.init), s.op);
+    }
+    for (const list of this.lists.values()) {
+      c.op([op.ARRAY, array.CREATEF], lc(8), list.handle);
+      c.op(op.MOVEF_F, lcf(0), list.length);
+    }
+    const drawing = /^ev3_(display|image|write|draw)/;
+    if (this.workspace.getAllBlocks(false).some((b) => drawing.test(b.type) && b.isEnabled())) this.clearDisplay();
+    for (const hat of this.hats) if (hat.kind !== 'message') c.op(op.OBJECT_START, lc(hat.id));
+    c.op(op.OBJECT_END);
+    return { code: c, localBytes: align4(this.t.locals.size) };
+  }
+
+  private hatObject(hat: { block: Blockly.Block; id: number; kind: HatKind }): { code: CodeBuffer; localBytes: number } {
+    this.t = new Thread(hat.id, hat.kind);
+    const c = this.t.code;
+    const body = () => this.statements(hat.block.getNextBlock());
+    if (hat.kind === 'start') {
+      body();
+      c.place(this.t.end);
+    } else if (hat.kind === 'message') {
+      body();
+      c.place(this.t.end);
+      c.op(op.MOVE8_8, lc(0), this.busy(hat.id));
+    } else {
+      // Runs each time the condition becomes true. The phase survives "stoppe andere
+      // Abläufe", which restarts this object: it then waits for the condition to end.
+      const phase = this.global(`phase${hat.id}`, 'bool', 0);
+      const top = c.label();
+      const rest = c.label();
+      c.jump(op.JR_TRUE, rest, phase);
+      c.place(top);
+      this.waitUntil(() => this.hatCondition(hat.block));
+      c.op(op.MOVE8_8, lc(1), phase);
+      body();
+      c.place(this.t.end);
+      c.place(rest);
+      this.waitUntil(() => this.not(this.hatCondition(hat.block)));
+      c.op(op.MOVE8_8, lc(0), phase);
+      c.jump(op.JR, top);
+    }
+    c.op(op.OBJECT_END);
+    return { code: c, localBytes: align4(this.t.locals.size) };
   }
 
   // --- Types ------------------------------------------------------------------
@@ -128,6 +221,17 @@ class Compiler {
     }
   }
 
+  /** Lists on the brick hold numbers only. */
+  private checkLists(): void {
+    for (const block of this.workspace.getAllBlocks(false)) {
+      if (!block.type.startsWith('ev3_list_') || !block.getInput('ITEM') || !block.isEnabled()) continue;
+      const item = block.getInputTargetBlock('ITEM');
+      if (this.staticType(item) !== 'str') continue;
+      if (item?.type === 'text' && NUMERIC.test(item.getFieldValue('TEXT'))) continue;
+      throw new RbfError('Listen können auf dem EV3 nur Zahlen enthalten.', block.id);
+    }
+  }
+
   private staticType(block: Blockly.Block | null, seen = new Set<string>()): Ty {
     if (!block) return 'num';
     if (block.type === 'variables_get') return this.varTypes.get(block.getFieldValue('VAR')) ?? 'num';
@@ -149,6 +253,29 @@ class Compiler {
     return lv(this.t.locals.alloc(ty === 'str' ? STR : 4));
   }
 
+  /** A global with a start value, set by object 1. */
+  private global(key: string, ty: 'num' | 'bool', init: number): Operand {
+    let s = this.state.get(key);
+    if (!s) {
+      s = { op: gv(this.globals.alloc(4)), ty, init };
+      this.state.set(key, s);
+    }
+    return s.op;
+  }
+
+  private motorSpeed = (p: MotorPort) => this.global(`speed${p}`, 'num', 75);
+  private motorHold = (p: MotorPort) => this.global(`hold${p}`, 'bool', 1);
+  private move = {
+    mask: () => this.global('moveMask', 'bool', portMask(['B', 'C'])),
+    /** -1 when the left motor has the higher port (the firmware's turn ratio refers to port order). */
+    sign: () => this.global('moveSign', 'num', 1),
+    speed: () => this.global('moveSpeed', 'num', 50),
+    hold: () => this.global('moveHold', 'bool', 1),
+    cm: () => this.global('moveCm', 'num', 17.6),
+  };
+  private volume = () => this.global('volume', 'num', 100);
+  private busy = (id: number) => this.global(`busy${id}`, 'bool', 0);
+
   private variable(block: Blockly.Block): Val {
     const id = block.getFieldValue('VAR');
     const param = this.t.scope?.get(id);
@@ -160,6 +287,16 @@ class Compiler {
       this.variables.set(id, v);
     }
     return v;
+  }
+
+  private list(block: Blockly.Block): { handle: Operand; length: Operand } {
+    const id = block.getFieldValue('LIST');
+    let l = this.lists.get(id);
+    if (!l) {
+      l = { handle: gv(this.globals.alloc(4)), length: gv(this.globals.alloc(4)) };
+      this.lists.set(id, l);
+    }
+    return l;
   }
 
   private assign(dst: Val, src: Val): void {
@@ -177,7 +314,10 @@ class Compiler {
 
   private toNum(v: Val, block: Blockly.Block): Val {
     if (v.ty === 'num') return v;
-    if (v.ty === 'str') throw new RbfError('Hier wird eine Zahl gebraucht, nicht ein Text.', block.id);
+    if (v.ty === 'str') {
+      if (isStr(v) && NUMERIC.test(v.k)) return num(Number(v.k.replace(',', '.')));
+      throw new RbfError('Hier wird eine Zahl gebraucht, nicht ein Text.', block.id);
+    }
     if (typeof v.k === 'boolean') return num(v.k ? 1 : 0);
     const r = this.tmp('num');
     this.t.code.op(op.MOVE8_F, v.op, r);
@@ -239,12 +379,22 @@ class Compiler {
     return r;
   }
 
+  /** A rounded integer parameter, e.g. for pixel coordinates. */
+  private roundInt(v: Val, bits: 8 | 16 | 32): Operand {
+    return this.int(this.mathOp(math.ROUND, v, Math.round), bits);
+  }
+
   private arith(code: number | number[], a: Val, b: Val, fold: (x: number, y: number) => number): Val {
     if (isNum(a) && isNum(b)) return num(fold(a.k, b.k));
     const r = this.tmp('num');
     this.t.code.op(code, a.op, b.op, r);
     return { ty: 'num', op: r };
   }
+
+  private add = (a: Val, b: Val) => this.arith(op.ADDF, a, b, (x, y) => x + y);
+  private sub = (a: Val, b: Val) => this.arith(op.SUBF, a, b, (x, y) => x - y);
+  private mul = (a: Val, b: Val) => this.arith(op.MULF, a, b, (x, y) => x * y);
+  private div = (a: Val, b: Val) => this.arith(op.DIVF, a, b, (x, y) => x / y);
 
   private mathOp(sub: number, a: Val, fold: (x: number) => number): Val {
     if (isNum(a)) return num(fold(a.k));
@@ -259,6 +409,35 @@ class Compiler {
     this.assign(r, v);
     return r;
   }
+
+  private cmp(code: number, a: Val, b: Val): Val {
+    const r = this.tmp('bool');
+    this.t.code.op(code, a.op, b.op, r);
+    return { ty: 'bool', op: r };
+  }
+
+  private not(v: Val): Val {
+    if (typeof v.k === 'boolean') return bool(!v.k);
+    const r = this.tmp('bool');
+    this.t.code.op(op.CP_EQ8, v.op, lc(0), r);
+    return { ty: 'bool', op: r };
+  }
+
+  private and(a: Val, b: Val): Val {
+    const r = this.tmp('bool');
+    this.t.code.op(op.AND8, a.op, b.op, r);
+    return { ty: 'bool', op: r };
+  }
+
+  /** "<", "=" or ">" as in the "ist …?" blocks; "=" compares whole numbers. */
+  private compareOp(value: Val, cmp: string, target: Val): Val {
+    if (cmp === 'LT') return this.cmp(op.CP_LTF, value, target);
+    if (cmp === 'GT') return this.cmp(op.CP_GTF, value, target);
+    const round = (v: Val) => this.mathOp(math.ROUND, v, Math.round);
+    return this.cmp(op.CP_EQF, round(value), round(target));
+  }
+
+  private numVal = (operand: Operand): Val => ({ ty: 'num', op: operand });
 
   // --- Expressions --------------------------------------------------------------
 
@@ -275,9 +454,14 @@ class Compiler {
     return this.toBool(this.input(block, name, bool(false)), block);
   }
 
+  private strIn(block: Blockly.Block, name: string): Val {
+    return this.toStr(this.input(block, name, str('')));
+  }
+
   private expr(block: Blockly.Block): Val {
     const c = this.t.code;
     const f = (name: string) => block.getFieldValue(name);
+    const port = () => f('PORT') as string;
     switch (block.type) {
       case 'math_number':
         return num(Number(f('NUM')) || 0);
@@ -294,10 +478,10 @@ class Compiler {
         const a = this.numIn(block, 'A');
         const b = this.numIn(block, 'B');
         switch (f('OP')) {
-          case 'ADD': return this.arith(op.ADDF, a, b, (x, y) => x + y);
-          case 'MINUS': return this.arith(op.SUBF, a, b, (x, y) => x - y);
-          case 'MULTIPLY': return this.arith(op.MULF, a, b, (x, y) => x * y);
-          case 'DIVIDE': return this.arith(op.DIVF, a, b, (x, y) => x / y);
+          case 'ADD': return this.add(a, b);
+          case 'MINUS': return this.sub(a, b);
+          case 'MULTIPLY': return this.mul(a, b);
+          case 'DIVIDE': return this.div(a, b);
           default: return this.arith([op.MATH, math.POW], a, b, Math.pow);
         }
       }
@@ -312,6 +496,27 @@ class Compiler {
           case 'LN': return this.mathOp(math.LN, x, Math.log);
           case 'LOG10': return this.mathOp(math.LOG, x, Math.log10);
           case 'EXP': return this.mathOp(math.EXP, x, Math.exp);
+          default: return this.arith([op.MATH, math.POW], num(10), x, Math.pow);
+        }
+      }
+      case 'ev3_math': {
+        const x = this.numIn(block, 'NUM');
+        const fromDeg = (fn: (r: number) => number) => (v: number) => fn((v * Math.PI) / 180);
+        const toDeg = (fn: (v: number) => number) => (v: number) => (fn(v) * 180) / Math.PI;
+        switch (f('OP')) {
+          case 'abs': return this.mathOp(math.ABS, x, Math.abs);
+          case 'floor': return this.mathOp(math.FLOOR, x, Math.floor);
+          case 'ceiling': return this.mathOp(math.CEIL, x, Math.ceil);
+          case 'sqrt': return this.mathOp(math.SQRT, x, Math.sqrt);
+          case 'sin': return this.mathOp(math.SIN, x, fromDeg(Math.sin));
+          case 'cos': return this.mathOp(math.COS, x, fromDeg(Math.cos));
+          case 'tan': return this.mathOp(math.TAN, x, fromDeg(Math.tan));
+          case 'asin': return this.mathOp(math.ASIN, x, toDeg(Math.asin));
+          case 'acos': return this.mathOp(math.ACOS, x, toDeg(Math.acos));
+          case 'atan': return this.mathOp(math.ATAN, x, toDeg(Math.atan));
+          case 'ln': return this.mathOp(math.LN, x, Math.log);
+          case 'log': return this.mathOp(math.LOG, x, Math.log10);
+          case 'exp': return this.mathOp(math.EXP, x, Math.exp);
           default: return this.arith([op.MATH, math.POW], num(10), x, Math.pow);
         }
       }
@@ -334,17 +539,17 @@ class Compiler {
       case 'logic_compare': {
         const a = this.input(block, 'A', num(0));
         const b = this.input(block, 'B', num(0));
-        const r = this.tmp('bool');
         const cmp = f('OP') as string;
-        if (a.ty === 'str' || b.ty === 'str') {
-          if (cmp !== 'EQ' && cmp !== 'NEQ') throw new RbfError('Texte lassen sich auf dem EV3 nur auf „=“ oder „≠“ vergleichen.', block.id);
+        if ((a.ty === 'str' || b.ty === 'str') && (cmp === 'EQ' || cmp === 'NEQ')) {
+          const r = this.tmp('bool');
           c.op([op.STRINGS, strings.COMPARE], this.toStr(a).op, this.toStr(b).op, r);
-          if (cmp === 'NEQ') c.op(op.CP_EQ8, r, lc(0), r);
-          return { ty: 'bool', op: r };
+          return cmp === 'NEQ' ? this.not({ ty: 'bool', op: r }) : { ty: 'bool', op: r };
+        }
+        if (a.ty === 'str' && !isStr(a) || b.ty === 'str' && !isStr(b)) {
+          throw new RbfError('Texte lassen sich auf dem EV3 nur auf „=“ oder „≠“ vergleichen.', block.id);
         }
         const codes: Record<string, number> = { EQ: op.CP_EQF, NEQ: op.CP_NEQF, LT: op.CP_LTF, LTE: op.CP_LTEQF, GT: op.CP_GTF, GTE: op.CP_GTEQF };
-        c.op(codes[cmp], this.toNum(a, block).op, this.toNum(b, block).op, r);
-        return { ty: 'bool', op: r };
+        return this.cmp(codes[cmp], this.toNum(a, block), this.toNum(b, block));
       }
       case 'logic_operation': {
         const a = this.boolIn(block, 'A');
@@ -355,71 +560,480 @@ class Compiler {
         c.op(and ? op.AND8 : op.OR8, a.op, b.op, r);
         return { ty: 'bool', op: r };
       }
-      case 'logic_negate': {
-        const a = this.boolIn(block, 'BOOL');
-        if (typeof a.k === 'boolean') return bool(!a.k);
-        const r = this.tmp('bool');
-        c.op(op.CP_EQ8, a.op, lc(0), r);
-        return { ty: 'bool', op: r };
-      }
+      case 'logic_negate':
+        return this.not(this.boolIn(block, 'BOOL'));
 
       case 'text_join': {
         let result: Val = str('');
         for (let i = 0; block.getInput('ADD' + i); i++) {
-          const item = this.toStr(this.input(block, 'ADD' + i, str('')));
-          if (typeof result.k === 'string' && typeof item.k === 'string') {
-            result = str(result.k + item.k);
-            continue;
-          }
-          const r = this.tmp('str');
-          c.op([op.STRINGS, strings.ADD], result.op, item.op, r);
-          result = { ty: 'str', op: r };
+          result = this.join(result, this.toStr(this.input(block, 'ADD' + i, str(''))));
         }
         return result;
       }
+      case 'ev3_length_of':
+        return this.length(this.strIn(block, 'TEXT'));
+      case 'ev3_letter_of':
+        return this.letter(this.numIn(block, 'INDEX', 1), this.strIn(block, 'TEXT'));
+      case 'ev3_contains':
+        return this.contains(this.strIn(block, 'TEXT'), this.strIn(block, 'PART'));
 
+      // Sensoren
+      case 'ev3_reflected':
+        return this.reflected(port());
+      case 'ev3_reflected_is':
+        return this.compareOp(this.reflected(port()), f('OP'), this.numIn(block, 'VALUE'));
+      case 'ev3_ambient':
+        return this.readSensor(port(), 1);
+      case 'ev3_ambient_is':
+        return this.compareOp(this.readSensor(port(), 1), f('OP'), this.numIn(block, 'VALUE'));
+      case 'ev3_color_value':
+        return this.color(port());
+      case 'ev3_color_is':
+        return this.cmp(op.CP_EQF, this.color(port()), num(Number(f('COLOR'))));
       case 'ev3_touch':
-        return this.compare(op.CP_GTF, this.readSensor(f('PORT'), 0), 0.5);
+        return this.touch(port());
+      case 'ev3_touch_is':
+        return f('STATE') === 'released' ? this.not(this.touch(port())) : this.touch(port());
+      case 'ev3_distance':
+        return this.distance(port(), f('UNIT'));
+      case 'ev3_distance_is':
+        return this.compareOp(this.distance(port(), f('UNIT')), f('OP'), this.numIn(block, 'VALUE'));
+      case 'ev3_angle':
+        return this.angle(port());
+      case 'ev3_angle_is':
+        return this.compareOp(this.angle(port()), f('OP'), this.numIn(block, 'VALUE'));
+      case 'ev3_rate':
+        return this.numVal(this.readValues(port(), 3, 2)[1]);
       case 'ev3_color':
       case 'ev3_gyro':
-        return this.readSensor(f('PORT'), Number(f('MODE')));
+        return this.readSensor(port(), Number(f('MODE')));
       case 'ev3_ultrasonic':
       case 'ev3_infrared':
-        return this.readSensor(f('PORT'), 0);
-      case 'ev3_color_is': {
-        const color = this.mathOp(math.ROUND, this.readSensor(f('PORT'), 2), Math.round);
-        return this.compare(op.CP_EQF, color, Number(f('COLOR')));
+        return this.readSensor(port(), 0);
+      case 'ev3_ir_beacon': {
+        const values = this.readValues(port(), 1, 8);
+        return this.numVal(values[(Number(f('CHANNEL')) - 1) * 2 + (f('WHAT') === 'distance' ? 1 : 0)]);
       }
+      case 'ev3_ir_remote':
+        return this.numVal(this.readValues(port(), 2, 4)[Number(f('CHANNEL')) - 1]);
+      case 'ev3_ir_remote_is':
+        return this.cmp(op.CP_EQF, this.numVal(this.readValues(port(), 2, 4)[Number(f('CHANNEL')) - 1]), num(Number(f('BUTTON'))));
       case 'ev3_motor_degrees':
-        return this.readSensor(f('PORT'), f('MODE') === 'speed' ? 2 : 0);
-      case 'ev3_button': {
-        const r = this.tmp('bool');
-        c.op([op.UI_BUTTON, uiButton.PRESSED], lc(BUTTONS[f('BUTTON') as ButtonName]), r);
-        return { ty: 'bool', op: r };
-      }
-      case 'ev3_timer': {
-        const now = this.tmp('int');
-        const r = this.tmp('num');
-        c.op(op.TIMER_READ, now);
-        c.op(op.SUB32, now, gv(this.timerStart), now);
-        c.op(op.MOVE32_F, now, r);
-        c.op(op.DIVF, r, lcf(1000), r);
-        return { ty: 'num', op: r };
-      }
+        return this.readSensor(port(), f('MODE') === 'speed' ? 2 : 0);
+      case 'ev3_button':
+        return this.button(f('BUTTON'));
+      case 'ev3_button_is':
+        return f('STATE') === 'released' ? this.not(this.button(f('BUTTON'))) : this.button(f('BUTTON'));
+      case 'ev3_button_value':
+        return this.buttonNumber();
+      case 'ev3_timer':
+        return this.timer();
+
+      // Listen
+      case 'ev3_list_length':
+        return this.numVal(this.list(block).length);
+      case 'ev3_list_item':
+        return this.listItem(block);
+      case 'ev3_list_index':
+        return this.listIndex(block);
+      case 'ev3_list_contains':
+        return this.cmp(op.CP_GTF, this.listIndex(block), num(0));
+      case 'ev3_list_value':
+        return this.listText(block);
     }
     throw new RbfError(`Der Block „${blockLabel(block)}“ kann noch nicht auf den EV3 übertragen werden.`, block.id);
   }
 
-  private compare(code: number, v: Val, k: number): Val {
-    const r = this.tmp('bool');
-    this.t.code.op(code, v.op, lcf(k), r);
-    return { ty: 'bool', op: r };
-  }
+  // --- Sensors ----------------------------------------------------------------------
 
   private readSensor(port: string, mode: number): Val {
     const r = this.tmp('num');
     this.t.code.op(op.INPUT_READSI, LAYER, lc(inputPortNumber(port as Port)), lc(0), lc(mode), r);
     return { ty: 'num', op: r };
+  }
+
+  /** All values of a sensor mode (opINPUT_DEVICE READY_SI). */
+  private readValues(port: string, mode: number, count: number): Operand[] {
+    const values = Array.from({ length: count }, () => this.tmp('num'));
+    this.t.code.op([op.INPUT_DEVICE, inputDevice.READY_SI], LAYER, lc(inputPortNumber(port as Port)), lc(0), lc(mode), lc(count), ...values);
+    return values;
+  }
+
+  private touch(port: string): Val {
+    return this.cmp(op.CP_GTF, this.readSensor(port, 0), num(0.5));
+  }
+
+  private color(port: string): Val {
+    return this.mathOp(math.ROUND, this.readSensor(port, 2), Math.round);
+  }
+
+  private reflected(port: string): Val {
+    const raw = this.readSensor(port, 0);
+    if (!this.workspace.getAllBlocks(false).some((b) => b.type === 'ev3_light_calibrate' && b.isEnabled())) return raw;
+    const min = this.numVal(this.global(`lightMin${port}`, 'num', 0));
+    const max = this.numVal(this.global(`lightMax${port}`, 'num', 100));
+    return this.clampNum(this.mul(this.div(this.sub(raw, min), this.sub(max, min)), num(100)), 0, 100);
+  }
+
+  private distance(port: string, unit: string): Val {
+    return this.readSensor(port, unit === 'in' ? 1 : 0);
+  }
+
+  private gyroOffset(port: string): Operand {
+    return this.global(`gyro${port}`, 'num', 0);
+  }
+
+  /** Mode 3 delivers angle and rate; switching modes would reset the angle. */
+  private angle(port: string): Val {
+    return this.sub(this.numVal(this.readValues(port, 3, 2)[0]), this.numVal(this.gyroOffset(port)));
+  }
+
+  private button(name: string): Val {
+    const r = this.tmp('bool');
+    this.t.code.op([op.UI_BUTTON, uiButton.PRESSED], lc(BUTTONS[name as ButtonName]), r);
+    return { ty: 'bool', op: r };
+  }
+
+  /** 0 none, 1 left, 2 centre, 3 right, 4 up, 5 down – as in EV3 Classroom. */
+  private buttonNumber(): Val {
+    const c = this.t.code;
+    const r = this.tmp('num');
+    const end = c.label();
+    c.op(op.MOVEF_F, lcf(0), r);
+    (['left', 'enter', 'right', 'up', 'down'] as const).forEach((name, i) => {
+      const next = c.label();
+      c.jump(op.JR_FALSE, next, this.button(name).op);
+      c.op(op.MOVEF_F, lcf(i + 1), r);
+      c.jump(op.JR, end);
+      c.place(next);
+    });
+    c.place(end);
+    return { ty: 'num', op: r };
+  }
+
+  private timer(): Val {
+    const c = this.t.code;
+    const now = this.tmp('int');
+    const r = this.tmp('num');
+    c.op(op.TIMER_READ, now);
+    c.op(op.SUB32, now, gv(this.timerStart), now);
+    c.op(op.MOVE32_F, now, r);
+    c.op(op.DIVF, r, lcf(1000), r);
+    return { ty: 'num', op: r };
+  }
+
+  /** Event condition of a "Wenn …" block. */
+  private hatCondition(block: Blockly.Block): Val {
+    const f = (name: string) => block.getFieldValue(name);
+    const port = () => f('PORT') as string;
+    switch (block.type) {
+      case 'ev3_when_color':
+        return f('COLOR') === 'change'
+          ? this.changed(block.id, this.color(port()), num(0))
+          : this.cmp(op.CP_EQF, this.color(port()), num(Number(f('COLOR'))));
+      case 'ev3_when_touch':
+        return f('EVENT') === 'pressed' ? this.touch(port()) : this.released(block.id, this.touch(port()));
+      case 'ev3_when_distance':
+      case 'ev3_when_angle': {
+        const value = block.type === 'ev3_when_angle' ? this.angle(port()) : this.distance(port(), f('UNIT'));
+        const target = this.numIn(block, 'VALUE');
+        return f('OP') === 'CHANGE' ? this.changed(block.id, value, target) : this.compareOp(value, f('OP'), target);
+      }
+      case 'ev3_when_button':
+        return f('EVENT') === 'released' ? this.released(block.id, this.button(f('BUTTON'))) : this.button(f('BUTTON'));
+      case 'ev3_when_timer':
+        return this.cmp(op.CP_GTF, this.timer(), this.numIn(block, 'SECONDS'));
+      default:
+        return this.boolIn(block, 'COND');
+    }
+  }
+
+  /** True once the value moved more than `delta` away from the last reference (the first reading sets it). */
+  private changed(key: string, value: Val, delta: Val): Val {
+    const c = this.t.code;
+    const ref = this.numVal(this.global(`ref${key}`, 'num', 0));
+    const known = this.global(`known${key}`, 'bool', 0);
+    const r = this.tmp('bool');
+    const end = c.label();
+    const first = c.label();
+    c.op(op.MOVE8_8, lc(0), r);
+    c.jump(op.JR_FALSE, first, known);
+    const diff = this.mathOp(math.ABS, this.sub(value, ref), Math.abs);
+    c.op(op.CP_GTF, diff.op, delta.op, r);
+    c.jump(op.JR_FALSE, end, r);
+    c.place(first);
+    c.op(op.MOVEF_F, value.op, ref.op);
+    c.op(op.MOVE8_8, lc(1), known);
+    c.place(end);
+    return { ty: 'bool', op: r };
+  }
+
+  /** True once when a press ends ("losgelassen", "angestoßen"). */
+  private released(key: string, pressed: Val): Val {
+    const was = this.global(`was${key}`, 'bool', 0);
+    const r = this.and({ ty: 'bool', op: was }, this.not(pressed));
+    this.t.code.op(op.MOVE8_8, pressed.op, was);
+    return r;
+  }
+
+  // --- Text -------------------------------------------------------------------------
+
+  private join(a: Val, b: Val): Val {
+    if (isStr(a) && isStr(b)) return str(a.k + b.k);
+    const r = this.tmp('str');
+    this.t.code.op([op.STRINGS, strings.ADD], a.op, b.op, r);
+    return { ty: 'str', op: r };
+  }
+
+  private length(text: Val): Val {
+    if (isStr(text)) return num(text.k.length);
+    const n = this.tmp('int');
+    const r = this.tmp('num');
+    this.t.code.op([op.STRINGS, strings.GET_SIZE], text.op, n);
+    this.t.code.op(op.MOVE16_F, n, r);
+    return { ty: 'num', op: r };
+  }
+
+  /** A character as DATA8, optionally in lower case. */
+  private charAt(text: Operand, index: Operand, lower: boolean): Operand {
+    const c = this.t.code;
+    const ch = this.tmp('int');
+    c.op(op.READ8, text, index, ch);
+    if (lower) {
+      const skip = c.label();
+      const flag = this.tmp('bool');
+      c.op(int8.CP_LT, ch, lc(65), flag);
+      c.jump(op.JR_TRUE, skip, flag);
+      c.op(int8.CP_GT, ch, lc(90), flag);
+      c.jump(op.JR_TRUE, skip, flag);
+      c.op(int8.ADD, ch, lc(32), ch);
+      c.place(skip);
+    }
+    return ch;
+  }
+
+  /** A text in a variable (opREAD8 cannot read constants). */
+  private inMemory(v: Val): Val {
+    return v.k !== undefined ? this.copy(v) : v;
+  }
+
+  private letter(index: Val, text: Val): Val {
+    if (isNum(index) && isStr(text)) return str(text.k.charAt(index.k - 1));
+    const c = this.t.code;
+    const source = this.inMemory(text);
+    const r = this.tmp('str');
+    const end = c.label();
+    const i = this.copy(this.sub(this.mathOp(math.ROUND, index, Math.round), num(1)));
+    c.op(op.WRITE8, lc(0), lc(0), r); // empty text
+    c.jump(op.JR_TRUE, end, this.cmp(op.CP_LTF, i, num(0)).op);
+    c.jump(op.JR_TRUE, end, this.cmp(op.CP_GTF, i, num(MAX_INDEX)).op);
+    c.jump(op.JR_TRUE, end, this.cmp(op.CP_GTEQF, i, this.length(source)).op);
+    const ch = this.charAt(source.op, this.int(i, 8), false);
+    c.op(op.WRITE8, ch, lc(0), r);
+    c.op(op.WRITE8, lc(0), lc(1), r);
+    c.place(end);
+    return { ty: 'str', op: r };
+  }
+
+  /** Case-insensitive, like Scratch. */
+  private contains(text: Val, part: Val): Val {
+    if (isStr(text) && isStr(part)) return bool(text.k.toLowerCase().includes(part.k.toLowerCase()));
+    const c = this.t.code;
+    const hay = this.inMemory(text);
+    const needle = this.inMemory(part);
+    const r = this.tmp('bool');
+    const n = this.int(this.clampNum(this.length(hay), 0, MAX_INDEX), 8);
+    const m = this.int(this.clampNum(this.length(needle), 0, MAX_INDEX), 8);
+    const last = this.tmp('int');
+    const i = this.tmp('int');
+    const j = this.tmp('int');
+    const at = this.tmp('int');
+    const flag = this.tmp('bool');
+    const outer = c.label();
+    const inner = c.label();
+    const mismatch = c.label();
+    const found = c.label();
+    const end = c.label();
+
+    c.op(op.MOVE8_8, lc(0), r);
+    c.op(int8.SUB, n, m, last); // last start position
+    c.op(op.MOVE8_8, lc(0), i);
+    c.place(outer);
+    c.op(int8.CP_GT, i, last, flag);
+    c.jump(op.JR_TRUE, end, flag);
+    c.op(op.MOVE8_8, lc(0), j);
+    c.place(inner);
+    c.op(int8.CP_LT, j, m, flag);
+    c.jump(op.JR_FALSE, found, flag);
+    c.op(int8.ADD, i, j, at);
+    c.op(op.CP_EQ8, this.charAt(hay.op, at, true), this.charAt(needle.op, j, true), flag);
+    c.jump(op.JR_FALSE, mismatch, flag);
+    c.op(int8.ADD, j, lc(1), j);
+    c.jump(op.JR, inner);
+    c.place(mismatch);
+    c.op(int8.ADD, i, lc(1), i);
+    c.jump(op.JR, outer);
+    c.place(found);
+    c.op(op.MOVE8_8, lc(1), r);
+    c.place(end);
+    return { ty: 'bool', op: r };
+  }
+
+  // --- Lists ------------------------------------------------------------------------
+
+  /** 1-based index → 0-based number, and whether it lies within the list (plus `extra` places). */
+  private listPosition(index: Val, length: Operand, extra: number): { at: Val; ok: Val } {
+    const at = this.copy(this.sub(this.mathOp(math.ROUND, index, Math.round), num(1)));
+    const lo = this.cmp(op.CP_GTEQF, at, num(0));
+    const hi = this.cmp(op.CP_LTF, this.sub(at, num(extra)), this.numVal(length));
+    return { at, ok: this.and(lo, hi) };
+  }
+
+  private ensureCapacity(handle: Operand, needed: Val): void {
+    const c = this.t.code;
+    const size = this.tmp('int');
+    const sizeF = this.tmp('num');
+    const skip = c.label();
+    c.op([op.ARRAY, array.SIZE], handle, size);
+    c.op(op.MOVE32_F, size, sizeF);
+    c.jump(op.JR_TRUE, skip, this.cmp(op.CP_GTEQF, this.numVal(sizeF), needed).op);
+    c.op([op.ARRAY, array.RESIZE], handle, this.int(this.add(needed, num(8)), 32));
+    c.place(skip);
+  }
+
+  private listItem(block: Blockly.Block): Val {
+    const c = this.t.code;
+    const l = this.list(block);
+    const r = this.tmp('num');
+    const end = c.label();
+    const { at, ok } = this.listPosition(this.numIn(block, 'INDEX', 1), l.length, 0);
+    c.op(op.MOVEF_F, lcf(0), r);
+    c.jump(op.JR_FALSE, end, ok.op);
+    c.op(op.ARRAY_READ, l.handle, this.int(at, 32), r);
+    c.place(end);
+    return { ty: 'num', op: r };
+  }
+
+  private listIndex(block: Blockly.Block): Val {
+    const c = this.t.code;
+    const l = this.list(block);
+    const item = this.toNum(this.input(block, 'ITEM', num(0)), block);
+    const r = this.tmp('num');
+    const k = this.tmp('num');
+    const v = this.tmp('num');
+    const top = c.label();
+    const end = c.label();
+    c.op(op.MOVEF_F, lcf(0), r);
+    c.op(op.MOVEF_F, lcf(0), k);
+    c.place(top);
+    c.jump(op.JR_FALSE, end, this.cmp(op.CP_LTF, this.numVal(k), this.numVal(l.length)).op);
+    c.op(op.ARRAY_READ, l.handle, this.int(this.numVal(k), 32), v);
+    c.op(op.ADDF, k, lcf(1), k);
+    c.jump(op.JR_FALSE, top, this.cmp(op.CP_EQF, this.numVal(v), item).op);
+    c.op(op.MOVEF_F, k, r);
+    c.place(end);
+    return { ty: 'num', op: r };
+  }
+
+  /** All items separated by spaces; stops before the text buffer could overflow. */
+  private listText(block: Blockly.Block): Val {
+    const c = this.t.code;
+    const l = this.list(block);
+    const r = this.tmp('str');
+    const k = this.tmp('num');
+    const v = this.tmp('num');
+    const size = this.tmp('int');
+    const sizeF = this.tmp('num');
+    const top = c.label();
+    const end = c.label();
+    const noSpace = c.label();
+    c.op(op.WRITE8, lc(0), lc(0), r);
+    c.op(op.MOVEF_F, lcf(0), k);
+    c.place(top);
+    c.jump(op.JR_FALSE, end, this.cmp(op.CP_LTF, this.numVal(k), this.numVal(l.length)).op);
+    c.op([op.STRINGS, strings.GET_SIZE], r, size);
+    c.op(op.MOVE16_F, size, sizeF);
+    c.jump(op.JR_TRUE, end, this.cmp(op.CP_GTF, this.numVal(sizeF), num(STR - 80)).op);
+    c.jump(op.JR_TRUE, noSpace, this.cmp(op.CP_EQF, this.numVal(k), num(0)).op);
+    c.op([op.STRINGS, strings.ADD], r, lcs(' '), r);
+    c.place(noSpace);
+    c.op(op.ARRAY_READ, l.handle, this.int(this.numVal(k), 32), v);
+    c.op([op.STRINGS, strings.ADD], r, this.toStr(this.numVal(v)).op, r);
+    c.op(op.ADDF, k, lcf(1), k);
+    c.jump(op.JR, top);
+    c.place(end);
+    return { ty: 'str', op: r };
+  }
+
+  /** Statement blocks on lists. */
+  private listStatement(block: Blockly.Block): void {
+    const c = this.t.code;
+    const l = this.list(block);
+    const length = this.numVal(l.length);
+    const item = () => this.toNum(this.input(block, 'ITEM', num(0)), block);
+    const end = c.label();
+    switch (block.type) {
+      case 'ev3_list_add': {
+        const v = item();
+        this.ensureCapacity(l.handle, this.add(length, num(1)));
+        c.op(op.ARRAY_WRITE, l.handle, this.int(length, 32), v.op);
+        c.op(op.ADDF, l.length, lcf(1), l.length);
+        break;
+      }
+      case 'ev3_list_clear':
+        c.op(op.MOVEF_F, lcf(0), l.length);
+        break;
+      case 'ev3_list_replace': {
+        const { at, ok } = this.listPosition(this.numIn(block, 'INDEX', 1), l.length, 0);
+        const v = item();
+        c.jump(op.JR_FALSE, end, ok.op);
+        c.op(op.ARRAY_WRITE, l.handle, this.int(at, 32), v.op);
+        break;
+      }
+      case 'ev3_list_delete': {
+        const { at, ok } = this.listPosition(this.numIn(block, 'INDEX', 1), l.length, 0);
+        c.jump(op.JR_FALSE, end, ok.op);
+        // Move the following items one place forward.
+        const top = c.label();
+        const done = c.label();
+        const v = this.tmp('num');
+        const next = this.tmp('num');
+        c.place(top);
+        c.op(op.ADDF, at.op, lcf(1), next);
+        c.jump(op.JR_FALSE, done, this.cmp(op.CP_LTF, this.numVal(next), length).op);
+        c.op(op.ARRAY_READ, l.handle, this.int(this.numVal(next), 32), v);
+        c.op(op.ARRAY_WRITE, l.handle, this.int(at, 32), v);
+        c.op(op.MOVEF_F, next, at.op);
+        c.jump(op.JR, top);
+        c.place(done);
+        c.op(op.SUBF, l.length, lcf(1), l.length);
+        break;
+      }
+      case 'ev3_list_insert': {
+        const v = this.copy(item());
+        const { at, ok } = this.listPosition(this.numIn(block, 'INDEX', 1), l.length, 1);
+        c.jump(op.JR_FALSE, end, ok.op);
+        this.ensureCapacity(l.handle, this.add(length, num(1)));
+        // Move the items from the end back by one place.
+        const k = this.copy(length);
+        const top = c.label();
+        const done = c.label();
+        const w = this.tmp('num');
+        const prev = this.tmp('num');
+        c.place(top);
+        c.jump(op.JR_FALSE, done, this.cmp(op.CP_GTF, k, at).op);
+        c.op(op.SUBF, k.op, lcf(1), prev);
+        c.op(op.ARRAY_READ, l.handle, this.int(this.numVal(prev), 32), w);
+        c.op(op.ARRAY_WRITE, l.handle, this.int(k, 32), w);
+        c.op(op.MOVEF_F, prev, k.op);
+        c.jump(op.JR, top);
+        c.place(done);
+        c.op(op.ARRAY_WRITE, l.handle, this.int(at, 32), v.op);
+        c.op(op.ADDF, l.length, lcf(1), l.length);
+        break;
+      }
+    }
+    c.place(end);
   }
 
   // --- Statements ---------------------------------------------------------------
@@ -440,27 +1054,55 @@ class Compiler {
     c.place(exit);
   }
 
+  /** Polls a condition, giving other threads a turn in between. */
+  private waitUntil(cond: () => Val): void {
+    const c = this.t.code;
+    const top = c.label();
+    const done = c.label();
+    c.place(top);
+    c.jump(op.JR_TRUE, done, cond().op);
+    c.op(op.SLEEP);
+    c.jump(op.JR, top);
+    c.place(done);
+  }
+
+  /** "warte bis … < > = / ändert sich um mehr als …" */
+  private waitValue(read: () => Val, cmp: string, target: Val): void {
+    if (cmp === 'CHANGE') {
+      const start = this.copy(read());
+      this.waitUntil(() => this.cmp(op.CP_GTF, this.mathOp(math.ABS, this.sub(read(), start), Math.abs), target));
+    } else {
+      this.waitUntil(() => this.compareOp(read(), cmp, target));
+    }
+  }
+
+  private wait(seconds: Val): void {
+    const c = this.t.code;
+    const ms = this.int(this.mul(seconds, num(1000)), 32);
+    const timer = this.tmp('int');
+    c.op(op.TIMER_WAIT, ms, timer);
+    c.op(op.TIMER_READY, timer);
+  }
+
   private statement(block: Blockly.Block): void {
     const c = this.t.code;
     const f = (name: string) => block.getFieldValue(name);
-    const ports = () => lc(portMask((f('PORT') as string).split('')));
+    const portList = () => (f('PORT') as string).split('') as MotorPort[];
+    const ports = () => lc(portMask(portList()));
     const brake = () => lc(f('BRAKE') === 'TRUE' ? 1 : 0);
+    const port = () => f('PORT') as string;
+    const draw = (sub: number, ...operands: Operand[]) => {
+      c.op([op.UI_DRAW, sub], ...operands);
+      c.op([op.UI_DRAW, uiDraw.UPDATE]);
+    };
+
+    if (block.type.startsWith('ev3_list_')) return this.listStatement(block);
 
     switch (block.type) {
-      case 'ev3_wait': {
-        const ms = this.int(this.arith(op.MULF, this.numIn(block, 'SECONDS', 1), num(1000), (x, y) => x * y), 32);
-        const timer = this.tmp('int');
-        c.op(op.TIMER_WAIT, ms, timer);
-        c.op(op.TIMER_READY, timer);
-        return;
-      }
+      case 'ev3_wait':
+        return this.wait(this.numIn(block, 'SECONDS', 1));
       case 'ev3_wait_until':
-        return this.loop((exit, next) => {
-          c.place(next);
-          c.jump(op.JR_TRUE, exit, this.boolIn(block, 'COND').op);
-          c.op(op.SLEEP); // give other threads a turn while waiting
-          c.jump(op.JR, next);
-        });
+        return this.waitUntil(() => this.boolIn(block, 'COND'));
       case 'ev3_forever':
         return this.loop((_exit, next) => {
           c.place(next);
@@ -474,9 +1116,7 @@ class Compiler {
         const check = c.label();
         return this.loop((exit, next) => {
           c.place(check);
-          const done = this.tmp('bool');
-          c.op(op.CP_LTEQF, count.op, lcf(0), done);
-          c.jump(op.JR_TRUE, exit, done);
+          c.jump(op.JR_TRUE, exit, this.cmp(op.CP_LTEQF, count, num(0)).op);
           this.statements(block.getInputTargetBlock('DO'));
           c.place(next);
           c.op(op.SUBF, count.op, lcf(1), count.op);
@@ -509,6 +1149,30 @@ class Compiler {
         c.jump(op.JR, f('FLOW') === 'BREAK' ? loop.exit : loop.next);
         return;
       }
+      case 'ev3_stop':
+        if (f('WHAT') === 'this') c.jump(op.JR, this.t.end);
+        else c.op(op.PROGRAM_STOP, lc(CURRENT_SLOT));
+        return;
+      case 'ev3_stop_other':
+        for (const hat of this.hats) {
+          if (hat.id === this.t.id) continue;
+          c.op(op.OBJECT_STOP, lc(hat.id));
+          if (hat.kind === 'when') c.op(op.OBJECT_START, lc(hat.id)); // keeps listening
+          if (hat.kind === 'message') c.op(op.MOVE8_8, lc(0), this.busy(hat.id));
+        }
+        return;
+      case 'ev3_broadcast':
+      case 'ev3_broadcast_wait': {
+        const ids = this.receivers.get(f('MESSAGE')) ?? [];
+        for (const id of ids) {
+          c.op(op.MOVE8_8, lc(1), this.busy(id));
+          c.op(op.OBJECT_START, lc(id));
+        }
+        if (block.type === 'ev3_broadcast_wait' && ids.length) {
+          this.waitUntil(() => ids.map((id) => this.not({ ty: 'bool', op: this.busy(id) })).reduce((a, b) => this.and(a, b)));
+        }
+        return;
+      }
 
       case 'variables_set': {
         const dst = this.variable(block);
@@ -537,8 +1201,47 @@ class Compiler {
         return;
       }
 
+      // Motoren
+      case 'ev3_motor_run_for':
+      case 'ev3_motor_run_for_speed': {
+        const amount = this.numIn(block, 'AMOUNT', 1);
+        const fixed = amount.k !== undefined ? amount : this.copy(amount);
+        const given = block.type === 'ev3_motor_run_for_speed' ? this.numIn(block, 'SPEED', 75) : null;
+        const sign = f('DIR') === 'ccw' ? -1 : 1;
+        for (const p of portList()) {
+          const speed = given ?? this.mul(this.numVal(this.motorSpeed(p)), num(sign));
+          this.runFor(lc(portMask([p])), speed, fixed, f('UNIT'), this.motorHold(p), null, false);
+        }
+        c.op(op.OUTPUT_READY, LAYER, ports());
+        return;
+      }
+      case 'ev3_motor_start_dir': {
+        const sign = f('DIR') === 'ccw' ? -1 : 1;
+        for (const p of portList()) {
+          const speed = this.int(this.clampNum(this.mul(this.numVal(this.motorSpeed(p)), num(sign)), -100, 100), 8);
+          c.op(op.OUTPUT_SPEED, LAYER, lc(portMask([p])), speed);
+        }
+        c.op(op.OUTPUT_START, LAYER, ports());
+        return;
+      }
+      case 'ev3_motor_start_power':
+        c.op(op.OUTPUT_POWER, LAYER, ports(), this.speed(block, 'POWER', 75));
+        c.op(op.OUTPUT_START, LAYER, ports());
+        return;
+      case 'ev3_motor_stop':
+        for (const p of portList()) c.op(op.OUTPUT_STOP, LAYER, lc(portMask([p])), this.motorHold(p));
+        return;
+      case 'ev3_motor_set_speed': {
+        const speed = this.clampNum(this.numIn(block, 'SPEED', 75), -100, 100);
+        for (const p of portList()) c.op(op.MOVEF_F, speed.op, this.motorSpeed(p));
+        return;
+      }
+      case 'ev3_motor_set_stop':
+        for (const p of portList()) c.op(op.MOVE8_8, lc(f('ACTION') === 'hold' ? 1 : 0), this.motorHold(p));
+        return;
       case 'ev3_motor_on':
-        c.op(op.OUTPUT_SPEED, LAYER, ports(), this.speed(block));
+      case 'ev3_motor_start_speed':
+        c.op(op.OUTPUT_SPEED, LAYER, ports(), this.speed(block, 'SPEED', block.type === 'ev3_motor_on' ? 50 : 75));
         c.op(op.OUTPUT_START, LAYER, ports());
         return;
       case 'ev3_motor_off':
@@ -548,37 +1251,162 @@ class Compiler {
         c.op(op.OUTPUT_CLR_COUNT, LAYER, ports());
         return;
       case 'ev3_motor_for':
-        return this.runFor(block, null);
+        this.runFor(ports(), this.numIn(block, 'SPEED', 50), this.numIn(block, 'AMOUNT', 1), f('UNIT'), brake(), null, true);
+        return;
       case 'ev3_steer_on':
-        c.op(op.OUTPUT_STEP_SYNC, LAYER, ports(), this.speed(block), this.turn(block), lc(0), lc(1));
+        c.op(op.OUTPUT_STEP_SYNC, LAYER, ports(), this.speed(block, 'SPEED', 50), this.turn(block), lc(0), lc(1));
         return;
       case 'ev3_steer_for':
-        return this.runFor(block, this.turn(block));
+        this.runFor(ports(), this.numIn(block, 'SPEED', 50), this.numIn(block, 'AMOUNT', 1), f('UNIT'), brake(), this.turn(block), true);
+        return;
 
-      case 'ev3_display_text': {
-        const text = this.toStr(this.input(block, 'TEXT', str('')));
-        const line = this.clampNum(this.numIn(block, 'LINE', 1), 1, 8);
-        const y = this.int(this.arith(op.MULF, this.arith(op.SUBF, line, num(1), (a, b) => a - b), num(LINE_HEIGHT), (a, b) => a * b), 16);
-        c.op([op.UI_DRAW, uiDraw.FILLRECT], lc(0), lc(0), y, lc(SCREEN_WIDTH), lc(LINE_HEIGHT));
-        c.op([op.UI_DRAW, uiDraw.SELECT_FONT], lc(0));
-        c.op([op.UI_DRAW, uiDraw.TEXT], lc(1), lc(0), y, text.op);
-        c.op([op.UI_DRAW, uiDraw.UPDATE]);
+      // Fahren
+      case 'ev3_move_for':
+      case 'ev3_move_start': {
+        const [speed, turn] = this.moveDirection(f('DIR'));
+        if (block.type === 'ev3_move_start') return this.sync(speed, turn, true, null, '');
+        return this.sync(speed, turn, true, this.numIn(block, 'AMOUNT', 10), f('UNIT'));
+      }
+      case 'ev3_move_steer_for':
+      case 'ev3_move_steer_for_speed':
+      case 'ev3_move_steer_start':
+      case 'ev3_move_steer_start_speed': {
+        const speed = block.getInput('SPEED') ? this.numIn(block, 'SPEED', 50) : this.numVal(this.move.speed());
+        const turn = this.mul(this.numIn(block, 'STEERING'), num(2));
+        if (block.type.includes('_start')) return this.sync(speed, turn, true, null, '');
+        return this.sync(speed, turn, true, this.numIn(block, 'AMOUNT', 10), f('UNIT'));
+      }
+      case 'ev3_move_tank_for':
+      case 'ev3_move_tank_start':
+        return this.tank(block);
+      case 'ev3_move_stop':
+        c.op(op.OUTPUT_STOP, LAYER, this.move.mask(), this.move.hold());
+        return;
+      case 'ev3_move_set_speed':
+        c.op(op.MOVEF_F, this.clampNum(this.numIn(block, 'SPEED', 50), -100, 100).op, this.move.speed());
+        return;
+      case 'ev3_move_set_motors': {
+        const [left, right] = (f('PORTS') as string).split('') as MotorPort[];
+        c.op(op.MOVE8_8, lc(portMask([left, right])), this.move.mask());
+        c.op(op.MOVEF_F, lcf(left < right ? 1 : -1), this.move.sign());
         return;
       }
+      case 'ev3_move_set_stop':
+        c.op(op.MOVE8_8, lc(f('ACTION') === 'hold' ? 1 : 0), this.move.hold());
+        return;
+      case 'ev3_move_set_rotation': {
+        const cm = this.mul(this.numIn(block, 'DISTANCE', 17.6), num(f('UNIT') === 'in' ? 2.54 : 1));
+        const skip = c.label();
+        c.jump(op.JR_FALSE, skip, this.cmp(op.CP_GTF, cm, num(0)).op);
+        c.op(op.MOVEF_F, cm.op, this.move.cm());
+        c.place(skip);
+        return;
+      }
+
+      // Anzeige
+      case 'ev3_image':
+        return this.drawImage(f('IMAGE'));
+      case 'ev3_image_for':
+        this.drawImage(f('IMAGE'));
+        this.wait(this.numIn(block, 'SECONDS', 2));
+        this.clearDisplay();
+        return;
+      case 'ev3_write_line':
+      case 'ev3_display_text': {
+        const old = block.type === 'ev3_display_text';
+        const height = old ? OLD_LINE_HEIGHT : LINE_HEIGHT;
+        const text = this.strIn(block, 'TEXT');
+        const line = this.clampNum(this.mathOp(math.ROUND, this.numIn(block, 'LINE', 1), Math.round), 1, old ? 8 : LINES);
+        const y = this.int(this.mul(this.sub(line, num(1)), num(height)), 16);
+        c.op([op.UI_DRAW, uiDraw.FILLRECT], lc(0), lc(0), y, lc(SCREEN_WIDTH), lc(height));
+        c.op([op.UI_DRAW, uiDraw.SELECT_FONT], lc(0));
+        return draw(uiDraw.TEXT, lc(1), lc(0), y, text.op);
+      }
+      case 'ev3_write_xy': {
+        const [font, ink] = (f('FONT') as string).split(',').map(Number);
+        const text = this.strIn(block, 'TEXT');
+        const [x, y] = this.coords(block, 'X', 'Y');
+        c.op([op.UI_DRAW, uiDraw.SELECT_FONT], lc(font));
+        return draw(uiDraw.TEXT, lc(ink), x, y, text.op);
+      }
+      case 'ev3_draw_pixel':
+        return draw(uiDraw.PIXEL, lc(Number(f('INK'))), ...this.coords(block, 'X', 'Y'));
+      case 'ev3_draw_line':
+        return draw(uiDraw.LINE, lc(Number(f('INK'))), ...this.coords(block, 'X1', 'Y1', 'X2', 'Y2'));
+      case 'ev3_draw_circle': {
+        const [x, y] = this.coords(block, 'X', 'Y');
+        const r = this.roundInt(this.mathOp(math.ABS, this.numIn(block, 'R', 10), Math.abs), 16);
+        return draw(f('FILL') === 'TRUE' ? uiDraw.FILLCIRCLE : uiDraw.CIRCLE, lc(Number(f('INK'))), x, y, r);
+      }
+      case 'ev3_draw_rect':
+        return draw(f('FILL') === 'TRUE' ? uiDraw.FILLRECT : uiDraw.RECT, lc(Number(f('INK'))), ...this.coords(block, 'X', 'Y', 'W', 'H'));
+      case 'ev3_display_invert':
+        return draw(uiDraw.INVERSERECT, lc(0), lc(0), lc(SCREEN_WIDTH), lc(SCREEN_HEIGHT));
       case 'ev3_display_clear':
         this.clearDisplay();
+        return;
+      case 'ev3_led':
+        c.op([op.UI_WRITE, uiWrite.LED], lc(LED_PATTERNS[f('PATTERN') as LedPattern]));
+        return;
+
+      // Klang
+      case 'ev3_sound_play':
+      case 'ev3_sound_start':
+        this.sounds.add(f('SOUND'));
+        c.op([op.SOUND, sound.PLAY], this.int(this.numVal(this.volume()), 8), lcs(soundPath(f('SOUND'))));
+        if (block.type === 'ev3_sound_play') c.op(op.SOUND_READY);
+        return;
+      case 'ev3_beep_for':
+      case 'ev3_beep_start': {
+        const note = this.numIn(block, 'NOTE', 60);
+        const power = this.arith([op.MATH, math.POW], num(2), this.div(this.sub(note, num(69)), num(12)), Math.pow);
+        const freq = this.int(this.clampNum(this.mul(power, num(440)), 250, 10000), 16);
+        const ms =
+          block.type === 'ev3_beep_start'
+            ? lc(ENDLESS_TONE_MS)
+            : this.int(this.clampNum(this.mul(this.numIn(block, 'SECONDS', 0.2), num(1000)), 1, ENDLESS_TONE_MS), 16);
+        c.op([op.SOUND, sound.TONE], this.int(this.numVal(this.volume()), 8), freq, ms);
+        if (block.type === 'ev3_beep_for') c.op(op.SOUND_READY);
+        return;
+      }
+      case 'ev3_sound_stop':
+        c.op([op.SOUND, sound.BREAK]);
+        return;
+      case 'ev3_volume_set':
+        c.op(op.MOVEF_F, this.clampNum(this.numIn(block, 'VOLUME', 100), 0, 100).op, this.volume());
         return;
       case 'ev3_tone': {
         const volume = this.int(this.clampNum(this.numIn(block, 'VOLUME', 50), 0, 100), 8);
         const freq = this.int(this.clampNum(this.numIn(block, 'FREQ', 440), 250, 10000), 16);
-        const ms = this.clampNum(this.arith(op.MULF, this.numIn(block, 'SECONDS', 0.5), num(1000), (a, b) => a * b), 1, 32767);
+        const ms = this.clampNum(this.mul(this.numIn(block, 'SECONDS', 0.5), num(1000)), 1, 32767);
         c.op([op.SOUND, sound.TONE], volume, freq, this.int(ms, 16));
         if (f('WAIT') === 'TRUE') c.op(op.SOUND_READY);
         return;
       }
-      case 'ev3_led':
-        c.op([op.UI_WRITE, uiWrite.LED], lc(LED_PATTERNS[f('PATTERN') as LedPattern]));
+
+      // Sensoren
+      case 'ev3_light_calibrate': {
+        const min = f('WHICH') === 'min';
+        c.op(op.MOVEF_F, this.numIn(block, 'VALUE').op, this.global(`light${min ? 'Min' : 'Max'}${port()}`, 'num', min ? 0 : 100));
         return;
+      }
+      case 'ev3_wait_color':
+        return this.waitUntil(() => this.cmp(op.CP_EQF, this.color(port()), num(Number(f('COLOR')))));
+      case 'ev3_wait_touch': {
+        const event = f('EVENT');
+        if (event !== 'released') this.waitUntil(() => this.touch(port()));
+        if (event !== 'pressed') this.waitUntil(() => this.not(this.touch(port())));
+        return;
+      }
+      case 'ev3_wait_distance':
+        return this.waitValue(() => this.distance(port(), f('UNIT')), f('OP'), this.copy(this.numIn(block, 'VALUE')));
+      case 'ev3_wait_angle':
+        return this.waitValue(() => this.angle(port()), f('OP'), this.copy(this.numIn(block, 'VALUE')));
+      case 'ev3_angle_reset':
+        c.op(op.MOVEF_F, this.readValues(port(), 3, 2)[0], this.gyroOffset(port()));
+        return;
+      case 'ev3_wait_button':
+        return this.waitUntil(() => (f('STATE') === 'released' ? this.not(this.button(f('BUTTON'))) : this.button(f('BUTTON'))));
       case 'ev3_timer_reset':
         c.op(op.TIMER_READ, gv(this.timerStart));
         return;
@@ -589,35 +1417,33 @@ class Compiler {
     throw new RbfError(`Der Block „${blockLabel(block)}“ kann noch nicht auf den EV3 übertragen werden.`, block.id);
   }
 
-  private speed(block: Blockly.Block): Operand {
-    return this.int(this.clampNum(this.numIn(block, 'SPEED', 50), -100, 100), 8);
+  private coords(block: Blockly.Block, ...names: string[]): Operand[] {
+    return names.map((name) => this.roundInt(this.numIn(block, name), 16));
+  }
+
+  private speed(block: Blockly.Block, name: string, fallback: number): Operand {
+    return this.int(this.clampNum(this.numIn(block, name, fallback), -100, 100), 8);
   }
 
   /** Steering -100..100 as in the EV3 software; the firmware wants -200..200. */
   private turn(block: Blockly.Block): Operand {
-    const steering = this.numIn(block, 'STEERING');
-    return this.int(this.clampNum(this.arith(op.MULF, steering, num(2), (a, b) => a * b), -200, 200), 16);
+    return this.int(this.clampNum(this.mul(this.numIn(block, 'STEERING'), num(2)), -200, 200), 16);
   }
 
-  /** "Motor/Lenken ... für x Umdrehungen/Grad/Sekunden": start and wait until done. */
-  private runFor(block: Blockly.Block, turn: Operand | null): void {
+  /**
+   * Starts motors for an amount of rotations/degrees/seconds; with `wait` it also
+   * waits until they are done. Negative amounts run backwards.
+   */
+  private runFor(ports: Operand, speedVal: Val, amount: Val, unit: string, brake: Operand, turn: Operand | null, wait: boolean): void {
     const c = this.t.code;
-    const ports = lc(portMask((block.getFieldValue('PORT') as string).split('')));
-    const brake = lc(block.getFieldValue('BRAKE') === 'TRUE' ? 1 : 0);
-    const unit = block.getFieldValue('UNIT') as string;
-    const amount = this.numIn(block, 'AMOUNT', 1);
     const end = c.label();
     const factor = unit === 'rotations' ? 360 : unit === 'seconds' ? 1000 : 1;
-    let value = this.mathOp(math.ROUND, this.arith(op.MULF, amount, num(factor), (a, b) => a * b), Math.round);
-    let speed = this.clampNum(this.numIn(block, 'SPEED', 50), -100, 100);
+    let value = this.mathOp(math.ROUND, this.mul(amount, num(factor)), Math.round);
+    let speed = this.clampNum(speedVal, -100, 100);
 
     if (unit === 'seconds') {
       if (isNum(value) && value.k <= 0) return;
-      if (!isNum(value)) {
-        const none = this.tmp('bool');
-        c.op(op.CP_LTEQF, value.op, lcf(0), none);
-        c.jump(op.JR_TRUE, end, none);
-      }
+      if (!isNum(value)) c.jump(op.JR_TRUE, end, this.cmp(op.CP_LTEQF, value, num(0)).op);
     } else if (isNum(value) && isNum(speed)) {
       // Negative degrees mean backwards: the firmware wants the sign on the speed.
       if (value.k === 0) return;
@@ -628,14 +1454,11 @@ class Compiler {
       value = this.copy(value);
       speed = this.copy(speed);
       const forward = c.label();
-      const flag = this.tmp('bool');
-      c.op(op.CP_LTF, value.op, lcf(0), flag);
-      c.jump(op.JR_FALSE, forward, flag);
+      c.jump(op.JR_FALSE, forward, this.cmp(op.CP_LTF, value, num(0)).op);
       c.op([op.MATH, math.NEGATE], value.op, value.op);
       c.op([op.MATH, math.NEGATE], speed.op, speed.op);
       c.place(forward);
-      c.op(op.CP_EQF, value.op, lcf(0), flag);
-      c.jump(op.JR_TRUE, end, flag);
+      c.jump(op.JR_TRUE, end, this.cmp(op.CP_EQF, value, num(0)).op);
     }
 
     const s = this.int(speed, 8);
@@ -645,8 +1468,93 @@ class Compiler {
     } else {
       c.op(unit === 'seconds' ? op.OUTPUT_TIME_SPEED : op.OUTPUT_STEP_SPEED, LAYER, ports, s, lc(0), amount32, lc(0), brake);
     }
-    c.op(op.OUTPUT_READY, LAYER, ports);
+    if (wait) c.op(op.OUTPUT_READY, LAYER, ports);
     c.place(end);
+  }
+
+  // --- Movement -------------------------------------------------------------------
+
+  private moveDirection(dir: string): [Val, Val] {
+    const speed = this.numVal(this.move.speed());
+    if (dir === 'back') return [this.mul(speed, num(-1)), num(0)];
+    if (dir === 'right') return [speed, num(200)];
+    if (dir === 'left') return [speed, num(-200)];
+    return [speed, num(0)];
+  }
+
+  /**
+   * Synchronized movement of the movement motors. `turn` is the firmware ratio
+   * (-200..200, positive = towards the second motor); `mirror` flips it when the
+   * left motor has the higher port. `amount` null runs until stopped.
+   */
+  private sync(speed: Val, turn: Val, mirror: boolean, amount: Val | null, unit: string): void {
+    const c = this.t.code;
+    const mask = this.move.mask();
+    const hold = this.move.hold();
+    const t = this.int(this.clampNum(mirror ? this.mul(turn, this.numVal(this.move.sign())) : turn, -200, 200), 16);
+    if (amount === null) {
+      c.op(op.OUTPUT_STEP_SYNC, LAYER, mask, this.int(this.clampNum(speed, -100, 100), 8), t, lc(0), hold);
+      return;
+    }
+    let value = amount;
+    let u = unit;
+    if (unit === 'cm' || unit === 'in') {
+      const cm = unit === 'in' ? this.mul(amount, num(2.54)) : amount;
+      value = this.mul(this.div(cm, this.numVal(this.move.cm())), num(360));
+      u = 'degrees';
+    }
+    this.runFor(mask, speed, value, u, hold, t, true);
+  }
+
+  /** Separate speeds for the left and right motor, as speed and turn ratio of the faster one. */
+  private tank(block: Blockly.Block): void {
+    const c = this.t.code;
+    const left = this.clampNum(this.numIn(block, 'LEFT', 50), -100, 100);
+    const right = this.clampNum(this.numIn(block, 'RIGHT', 50), -100, 100);
+    // a: motor with the lower port, b: the other one.
+    const swapped = this.cmp(op.CP_LTF, this.numVal(this.move.sign()), num(0));
+    const a = this.tmp('num');
+    const b = this.tmp('num');
+    c.op(op.SELECTF, swapped.op, right.op, left.op, a);
+    c.op(op.SELECTF, swapped.op, left.op, right.op, b);
+    const speed = this.tmp('num');
+    const turn = this.tmp('num');
+    const end = c.label();
+    const stop = c.label();
+    const bFaster = c.label();
+    const go = c.label();
+    const absA = this.mathOp(math.ABS, this.numVal(a), Math.abs);
+    const absB = this.mathOp(math.ABS, this.numVal(b), Math.abs);
+    const bIsFaster = this.cmp(op.CP_LTF, absA, absB);
+    c.jump(op.JR_TRUE, stop, this.cmp(op.CP_EQF, this.add(absA, absB), num(0)).op);
+    c.jump(op.JR_TRUE, bFaster, bIsFaster.op);
+    c.op(op.MOVEF_F, a, speed); // turn = 100 · (1 − b/a)
+    c.op(op.DIVF, b, a, turn);
+    c.jump(op.JR, go);
+    c.place(bFaster);
+    c.op(op.MOVEF_F, b, speed); // turn = −100 · (1 − a/b)
+    c.op(op.DIVF, a, b, turn);
+    c.place(go);
+    c.op(op.SUBF, lcf(1), turn, turn);
+    c.op(op.MULF, turn, lcf(100), turn);
+    const keep = c.label();
+    c.jump(op.JR_FALSE, keep, bIsFaster.op);
+    c.op([op.MATH, math.NEGATE], turn, turn);
+    c.place(keep);
+    const forever = block.type === 'ev3_move_tank_start';
+    this.sync(this.numVal(speed), this.numVal(turn), false, forever ? null : this.numIn(block, 'AMOUNT', 10), forever ? '' : block.getFieldValue('UNIT'));
+    c.jump(op.JR, end);
+    c.place(stop);
+    if (forever) c.op(op.OUTPUT_STOP, LAYER, this.move.mask(), this.move.hold());
+    c.place(end);
+  }
+
+  // --- Display ----------------------------------------------------------------------
+
+  private drawImage(id: string): void {
+    const c = this.t.code;
+    emitDraw(imageOps(id), (sub, args) => c.op([op.UI_DRAW, sub], ...args.map((a) => (typeof a === 'string' ? lcs(a) : lc(a)))));
+    c.op([op.UI_DRAW, uiDraw.UPDATE]);
   }
 
   private clearDisplay(): void {
@@ -654,7 +1562,7 @@ class Compiler {
     this.t.code.op([op.UI_DRAW, uiDraw.UPDATE]);
   }
 
-  // --- Eigene Blöcke --------------------------------------------------------------
+  // --- Meine Blöcke ------------------------------------------------------------------
 
   private definition(call: Blockly.Block): Blockly.Block | null {
     return Blockly.Procedures.getDefinition(call.getFieldValue('NAME'), this.workspace);
@@ -676,7 +1584,7 @@ class Compiler {
     });
 
     const t = this.t;
-    const saved = { scope: t.scope, loops: t.loops };
+    const saved = { scope: t.scope, loops: t.loops, end: t.end };
     const label = t.code.label();
     const result = wantResult ? { ty: this.staticType(def.getInputTargetBlock('RETURN')), op: [] as Operand } : undefined;
     if (result) result.op = this.tmp(result.ty);

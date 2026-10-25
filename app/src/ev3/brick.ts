@@ -1,4 +1,5 @@
 import type { ButtonName, LedPattern } from './bytecodes';
+import type { DrawOp } from './display';
 import type { BrickFiles } from './files';
 
 export type MotorPort = 'A' | 'B' | 'C' | 'D';
@@ -31,6 +32,8 @@ export interface Brick {
   readonly name: string;
 
   motorStart(ports: MotorPort[], speed: number): Promise<void>;
+  /** Runs motors with constant power, without speed regulation. */
+  motorPower(ports: MotorPort[], power: number): Promise<void>;
   motorStop(ports: MotorPort[], brake: boolean): Promise<void>;
   motorRunDegrees(ports: MotorPort[], speed: number, degrees: number, brake: boolean): Promise<void>;
   motorRunTime(ports: MotorPort[], speed: number, ms: number, brake: boolean): Promise<void>;
@@ -44,15 +47,21 @@ export interface Brick {
   readPort(port: Port, mode: number): Promise<number>;
   /** Reads several ports in one round trip (used by the device view). */
   readPorts(requests: { port: Port; mode: number }[]): Promise<number[]>;
+  /** Reads all values a sensor mode delivers (e.g. heading and distance per channel). */
+  readPortValues(port: Port, mode: number, count: number): Promise<number[]>;
   /** Type and mode of all eight ports. */
   readPortStates(): Promise<PortState[]>;
 
   playTone(volume: number, frequency: number, ms: number): Promise<void>;
+  /** Plays one of the app's sounds (see sounds.ts). */
+  playSound(id: string, volume: number): Promise<void>;
   stopSound(): Promise<void>;
   setLed(pattern: LedPattern): Promise<void>;
   buttonPressed(button: ButtonName): Promise<boolean>;
   displayText(text: string, line: number): Promise<void>;
   displayClear(): Promise<void>;
+  /** Draws on the screen and shows the result. */
+  draw(ops: DrawOp[]): Promise<void>;
   battery(): Promise<{ voltage: number; percent: number }>;
 
   /** Files and programs on the brick; missing for the simulator. */

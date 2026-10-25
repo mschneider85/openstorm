@@ -2,13 +2,20 @@
 
 Blockprogrammierung für LEGO MINDSTORMS EV3 auf dem iPad, ohne Mac, ohne Kabel und ohne bezahlten Apple-Developer-Account.
 
-- **Programm**: Programmieren mit Blöcken wie in Scratch, in den Farben der EV3-Software: Ablauf, Motoren, Anzeige und Ton, Sensoren, Rechnen, Variablen und eigene Blöcke. Mehrere „Programmstart“-Blöcke laufen gleichzeitig.
+- **Programm**: Programmieren mit Blöcken wie in LEGO Education EV3 Classroom (Scratch), mit denselben Kategorien und Farben: Motoren, Fahren, Anzeige, Klang, Ereignisse, Steuerung, Sensoren, Operatoren, Variablen und Listen, Meine Blöcke. Alle Ereignisblöcke („Wenn Programm startet“, „Wenn Berührungssensor gedrückt“, „Wenn ich Nachricht empfange“ …) laufen gleichzeitig.
 - **Geräte**: Zeigt, was an den Ports 1–4 und A–D steckt, mit Live-Werten und umschaltbarem Modus. Motoren lassen sich per Antippen und Halten bewegen. Außerdem gibt es Statusleuchte, Ton und Anzeige zum Ausprobieren.
 - **Simulator**: Ein virtueller EV3 im Browser. Sensorwerte stellt man unter „Geräte“ ein, Töne sind hörbar, und die Anzeige wird nachgebildet.
 
 Programme laufen auf zwei Arten:
 - **▶ Start:** Das Programm läuft in der App und steuert den EV3 live. Die gerade aktiven Blöcke leuchten auf. Das iPad muss dafür verbunden bleiben.
 - **⇩ Auf EV3:** Die App übersetzt das Programm in die Maschinensprache des EV3 (`.rbf`, wie die originale LEGO-Software) und speichert es auf dem Stein. Dort läuft es ohne iPad.
+
+### Unterschiede zu EV3 Classroom
+
+- **Bilder und Klänge:** Die Bilder (Augen, Smiley, Pfeile …) und Klänge (Hupe, Sirene, Erfolg …) sind eigene, denn die von LEGO dürfen nicht mitgeliefert werden. Die Klänge lädt die App beim ersten Abspielen in den Ordner `OpenStorm` auf dem EV3.
+- **Listen auf dem EV3:** Wenn das Programm auf dem Stein läuft (⇩ Auf EV3), können Listen nur Zahlen enthalten. Texte sind dort höchstens 255 Zeichen lang, „Zeichen … von“ und „enthält“ sehen nur die ersten 127.
+- **Infrarotsensor:** Der Infrarotsensor und die Fernbedienung aus dem EV3-Home-Set haben zusätzliche Blöcke unter „Sensoren“.
+- **Nicht nachgebaut:** Wetter, Musik-Erweiterung sowie Messwerte aufzeichnen und darstellen.
 
 ## So funktioniert es
 

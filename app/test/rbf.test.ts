@@ -63,7 +63,7 @@ describe('EV3 programs (.rbf)', () => {
       ]),
       { sensor: (port, mode) => (port === 17 && mode === 0 ? 720 : 0) },
     );
-    expect(vm.log).toEqual(['clear', 'run B 75 720deg brake', 'text 2 720']);
+    expect(vm.log).toEqual(['clear', 'run B 75 720deg brake', 'text 0,16 720']);
   });
 
   it('turns a negative amount into driving backwards', () => {
@@ -118,7 +118,7 @@ describe('EV3 programs (.rbf)', () => {
         [{ name: 'i', id: 'i' }],
       ),
     );
-    expect(vm.log.filter((l) => l.startsWith('text'))).toEqual(['text 1 Runde 1', 'text 1 Runde 2', 'text 1 Runde 3', 'text 2 0.75']);
+    expect(vm.log.filter((l) => l.startsWith('text'))).toEqual(['text 0,0 Runde 1', 'text 0,0 Runde 2', 'text 0,0 Runde 3', 'text 0,16 0.75']);
   });
 
   it('waits for the touch sensor and decides with if/else', () => {

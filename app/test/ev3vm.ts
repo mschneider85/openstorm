@@ -3,16 +3,21 @@
 // Parameter decoding follows PrimParPointer in lms2012.c; only the opcodes the
 // OpenStorm compiler emits are implemented.
 
-type P = '8' | '16' | '32' | 'F';
+type P = '8' | '16' | '32' | 'F' | 'S';
 type Sig = readonly P[];
 
 const UNARY_MATH: Record<number, (x: number) => number> = {
   1: Math.exp, 3: Math.floor, 4: Math.ceil, 5: (x) => (x < 0 ? Math.ceil(x - 0.5) : Math.floor(x + 0.5)),
   6: Math.abs, 7: (x) => 0 - x, 8: Math.sqrt, 9: Math.log10, 10: Math.log,
+  11: (x) => Math.sin((x * Math.PI) / 180), 12: (x) => Math.cos((x * Math.PI) / 180), 13: (x) => Math.tan((x * Math.PI) / 180),
+  14: (x) => (Math.asin(x) * 180) / Math.PI, 15: (x) => (Math.acos(x) * 180) / Math.PI, 16: (x) => (Math.atan(x) * 180) / Math.PI,
 };
+/** opINPUT_DEVICE READY_SI: layer, port, type, mode, then a count and that many DATAF results. */
+const READY_SI = 29;
 
 const OPS: Record<number, Sig | Record<number, Sig>> = {
-  0x02: ['16'], 0x05: ['16'], 0x0a: [], 0x0b: [],
+  0x02: ['16'], 0x04: ['16'], 0x05: ['16'], 0x0a: [], 0x0b: [],
+  0x10: ['8', '8', '8'], 0x14: ['8', '8', '8'], 0x44: ['8', '8', '8'], 0x48: ['8', '8', '8'], 0x34: ['16', '8'],
   0x13: ['F', 'F', 'F'], 0x16: ['32', '32', '32'], 0x17: ['F', 'F', 'F'], 0x1b: ['F', 'F', 'F'], 0x1f: ['F', 'F', 'F'],
   0x20: ['8', '8', '8'], 0x24: ['8', '8', '8'],
   0x30: ['8', '8'], 0x33: ['8', 'F'], 0x37: ['16', 'F'], 0x3b: ['32', 'F'],
@@ -20,18 +25,26 @@ const OPS: Record<number, Sig | Record<number, Sig>> = {
   0x40: ['32'], 0x41: ['8', '32'], 0x42: ['8', '32'],
   0x47: ['F', 'F', '8'], 0x4b: ['F', 'F', '8'], 0x4c: ['8', '8', '8'], 0x4f: ['F', 'F', '8'],
   0x53: ['F', 'F', '8'], 0x57: ['F', 'F', '8'], 0x5b: ['F', 'F', '8'], 0x5f: ['8', 'F', 'F', 'F'],
-  0x7d: { 2: ['8', '8', '8'], 3: ['8', '8', '8'], 5: ['8', '8'], 11: ['F', '8', '8', '8'] },
+  0x7d: { 1: ['8', '16'], 2: ['8', '8', '8'], 3: ['8', '8', '8'], 5: ['8', '8'], 11: ['F', '8', '8', '8'] },
   0x82: { 27: ['8'] },
   0x83: { 9: ['8', '8'] },
-  0x84: { 0: [], 5: ['8', '16', '16', '8'], 9: ['8', '16', '16', '16', '16'], 17: ['8'], 19: ['8', '16', '16'] },
+  0x84: {
+    0: [], 2: ['8', '16', '16'], 3: ['8', '16', '16', '16', '16'], 4: ['8', '16', '16', '16'], 5: ['8', '16', '16', 'S'],
+    9: ['8', '16', '16', '16', '16'], 10: ['8', '16', '16', '16', '16'], 16: ['16', '16', '16', '16'], 17: ['8'],
+    19: ['8', '16', '16'], 24: ['8', '16', '16', '16'],
+  },
   0x85: ['32', '32'], 0x86: ['32'], 0x87: ['32'],
-  0x8d: { 1: ['F', 'F'], 2: ['F', 'F', 'F'], 3: ['F', 'F'], 4: ['F', 'F'], 5: ['F', 'F'], 6: ['F', 'F'], 7: ['F', 'F'], 8: ['F', 'F'], 9: ['F', 'F'], 10: ['F', 'F'], 20: ['F', 'F', 'F'] },
+  0x8d: { 1: ['F', 'F'], 2: ['F', 'F', 'F'], 3: ['F', 'F'], 4: ['F', 'F'], 5: ['F', 'F'], 6: ['F', 'F'], 7: ['F', 'F'], 8: ['F', 'F'], 9: ['F', 'F'], 10: ['F', 'F'], 11: ['F', 'F'], 12: ['F', 'F'], 13: ['F', 'F'], 14: ['F', 'F'], 15: ['F', 'F'], 16: ['F', 'F'], 20: ['F', 'F', 'F'] },
   0x8e: ['16', '16', '16'],
-  0x94: { 1: ['8', '16', '16'] }, 0x96: [],
+  0x94: { 0: [], 1: ['8', '16', '16'], 2: ['8', 'S'] }, 0x96: [],
+  0x99: { [READY_SI]: ['8', '8', '8', '8'] },
   0x9d: ['8', '8', '8', '8', 'F'],
-  0xa3: ['8', '8', '8'], 0xa5: ['8', '8', '8'], 0xa6: ['8', '8'], 0xaa: ['8', '8'],
+  0xa3: ['8', '8', '8'], 0xa4: ['8', '8', '8'], 0xa5: ['8', '8', '8'], 0xa6: ['8', '8'], 0xaa: ['8', '8'],
   0xae: ['8', '8', '8', '32', '32', '32', '8'], 0xaf: ['8', '8', '8', '32', '32', '32', '8'],
   0xb0: ['8', '8', '8', '16', '32', '8'], 0xb1: ['8', '8', '8', '16', '32', '8'], 0xb2: ['8', '8'],
+  0xc1: { 4: ['32', '16'], 5: ['16', '32'], 12: ['16', '32'] },
+  0xc2: ['16', '32', 'F'], 0xc3: ['16', '32', 'F'],
+  0xc8: ['8', '8', '8'], 0xcc: ['8', '8', '8'],
 };
 const RANGE: Record<string, [number, number]> = { '8': [-127, 127], '16': [-32767, 32767], '32': [-2147483647, 2147483647] };
 
@@ -52,11 +65,15 @@ export interface FakeBrick {
   /** Sensor value for INPUT_READSI (port number as in the firmware: 0-3, motors 16-19). */
   sensor?: (port: number, mode: number) => number;
   button?: (button: number) => boolean;
+  /** Values for opINPUT_DEVICE READY_SI. */
+  values?: (port: number, mode: number) => number[];
 }
 
 export class Ev3Vm {
   readonly log: string[] = [];
-  readonly display: string[] = Array(8).fill('');
+  /** Texts on the screen by their y position. */
+  private texts = new Map<number, string>();
+  private arrays = new Map<number, number[]>();
   /** Virtual time in ms; advances by one per scheduler round. */
   now = 0;
   private globals: Uint8Array;
@@ -75,6 +92,11 @@ export class Ev3Vm {
       const start = this.view.getUint32(head, true);
       this.objects.push({ start, ip: start, locals: new Uint8Array(this.view.getUint32(head + 8, true)), running: i === 0 });
     }
+  }
+
+  /** Texts on the screen, top to bottom. */
+  get display(): string[] {
+    return [...this.texts.entries()].sort((a, b) => a[0] - b[0]).map(([, t]) => t);
   }
 
   // --- Validation (cValidateProgram) ----------------------------------------------
@@ -97,6 +119,11 @@ export class Ev3Vm {
         const sig = this.signature(code, index);
         if (!Array.isArray(OPS[code])) index = this.skipParam(index, '8', true); // sub-code
         for (const p of sig) index = this.skipParam(index, p, false);
+        if (code === 0x99) {
+          const count = this.decode(index);
+          index = count.next;
+          for (let k = 0; k < (count.value ?? 0); k++) index = this.skipParam(index, 'F', false);
+        }
         if (index >= this.image.length) throw new Error('object without OBJECT_END');
       }
     }
@@ -120,7 +147,7 @@ export class Ev3Vm {
       if (mustBeConst) throw new Error('sub-code must be constant');
       const align = type === '16' ? 2 : type === '32' || type === 'F' ? 4 : 1;
       if (value! % align) throw new Error(`misaligned ${type} variable at ${value}`);
-    } else if (type !== 'F' && value !== null) {
+    } else if (type !== 'F' && type !== 'S' && value !== null) {
       const [min, max] = RANGE[type];
       if (value < min || value > max) throw new Error(`constant ${value} out of range for DATA${type}`);
     }
@@ -208,7 +235,36 @@ export class Ev3Vm {
     switch (code) {
       case 0x0a: obj.running = false; obj.ip = obj.start; return false;
       case 0x0b: return false;
+      case 0x02: { p(); for (const o of this.objects) o.running = false; this.log.push('program stop'); return false; }
+      case 0x04: { const id = this.i16(p()); const o = this.objects[id - 1]; o.running = false; return o !== obj; }
       case 0x05: { const id = this.i16(p()); const o = this.objects[id - 1]; o.ip = o.start; o.running = true; return true; }
+      case 0x10: { const a = this.i8(p()), b = this.i8(p()); this.set8(p(), a + b); return true; }
+      case 0x14: { const a = this.i8(p()), b = this.i8(p()); this.set8(p(), a - b); return true; }
+      case 0x44: { const a = this.i8(p()), b = this.i8(p()); this.set8(p(), a < b ? 1 : 0); return true; }
+      case 0x48: { const a = this.i8(p()), b = this.i8(p()); this.set8(p(), a > b ? 1 : 0); return true; }
+      case 0x34: { const a = this.i16(p()); this.set8(p(), a); return true; }
+      case 0xa4: { p(); const m = this.i8(p()); this.log.push(`power ${ports(m)} ${this.i8(p())}`); return true; }
+      case 0xc1: {
+        const s = sub();
+        if (s === 4) { const n = this.i32(p()); const h = this.arrays.size + 1; this.arrays.set(h, Array(n).fill(0)); this.set16(p(), h); }
+        else if (s === 5) { const a = this.arrays.get(this.i16(p()))!; const n = this.i32(p()); while (a.length < n) a.push(0); a.length = n; }
+        else { const a = this.arrays.get(this.i16(p()))!; this.set32(p(), a.length); }
+        return true;
+      }
+      case 0xc2: case 0xc3: {
+        const a = this.arrays.get(this.i16(p()))!; const i = this.i32(p()); const v = p();
+        if (i < 0 || i >= a.length) throw new Error(`array index ${i} outside 0..${a.length - 1}`);
+        if (code === 0xc2) a[i] = this.f(v); else this.setF(v, a[i]);
+        return true;
+      }
+      case 0xc8: { const src = p(); const i = this.i8(p()); this.set8(p(), src.mem[src.off + i]); return true; }
+      case 0xcc: { const v = this.i8(p()); const i = this.i8(p()); const dst = p(); dst.mem[dst.off + i] = v; return true; }
+      case 0x99: {
+        sub(); p(); const port = this.i8(p()); p(); const mode = this.i8(p()); const n = this.i8(p());
+        const values = this.brick.values?.(port, mode) ?? [];
+        for (let k = 0; k < n; k++) this.setF(p(), values[k] ?? 0);
+        return true;
+      }
       case 0x13: { const a = this.f(p()), b = this.f(p()); this.setF(p(), a + b); return true; }
       case 0x17: { const a = this.f(p()), b = this.f(p()); this.setF(p(), a - b); return true; }
       case 0x1b: { const a = this.f(p()), b = this.f(p()); this.setF(p(), a * b); return true; }
@@ -240,7 +296,8 @@ export class Ev3Vm {
       case 0x5f: { const flag = this.i8(p()), a = this.f(p()), b = this.f(p()); this.setF(p(), flag ? a : b); return true; }
       case 0x7d: {
         const s = sub();
-        if (s === 2) { const a = this.str(p()), b = this.str(p()); this.setStr(p(), a + b); }
+        if (s === 1) { const a = this.str(p()); this.set16(p(), a.length); }
+        else if (s === 2) { const a = this.str(p()), b = this.str(p()); this.setStr(p(), a + b); }
         else if (s === 3) { const a = this.str(p()), b = this.str(p()); this.set8(p(), a === b ? 1 : 0); }
         else if (s === 5) { const a = this.str(p()); this.setStr(p(), a); }
         else { const v = this.f(p()); const fmt = this.str(p()); const size = this.i8(p()); this.setStr(p(), formatG(v, fmt).slice(0, size - 1)); }
@@ -251,12 +308,19 @@ export class Ev3Vm {
       case 0x84: {
         const s = sub();
         if (s === 5) {
-          p(); p(); const y = this.i16(p()); const text = this.str(p());
-          this.display[y / 16] = text;
-          this.log.push(`text ${y / 16 + 1} ${text}`);
-        } else if (s === 9) { p(); p(); const y = this.i16(p()); p(); p(); this.display[y / 16] = ''; }
-        else if (s === 17) p();
-        else if (s === 19) { p(); p(); p(); this.display.fill(''); this.log.push('clear'); }
+          const ink = this.i8(p()); const x = this.i16(p()); const y = this.i16(p()); const text = this.str(p());
+          this.texts.set(y, text);
+          this.log.push(`text ${x},${y}${ink ? '' : ' white'} ${text}`);
+        } else if (s === 9) {
+          p(); p(); const y = this.i16(p()); p(); const h = this.i16(p());
+          for (const k of this.texts.keys()) if (k >= y && k < y + h) this.texts.delete(k);
+        } else if (s === 19) { p(); p(); p(); this.texts.clear(); this.log.push('clear'); }
+        else if (s === 0 || s === 17) { if (s === 17) p(); }
+        else {
+          const args = OPS[0x84] as Record<number, Sig>;
+          const values = args[s].map((t) => (t === '16' ? this.i16(p()) : this.i8(p())));
+          this.log.push(`draw ${s} ${values.join(' ')}`);
+        }
         return true;
       }
       case 0x85: { const ms = this.i32(p()); this.set32(p(), this.now + ms); return true; }
@@ -269,7 +333,12 @@ export class Ev3Vm {
         return true;
       }
       case 0x8e: { const min = this.i16(p()), max = this.i16(p()); this.set16(p(), Math.round((min + max) / 2)); return true; }
-      case 0x94: { sub(); const vol = this.i8(p()), freq = this.i16(p()), ms = this.i16(p()); this.soundUntil = this.now + ms; this.log.push(`tone ${freq} ${ms} ${vol}`); return true; }
+      case 0x94: {
+        const s = sub();
+        if (s === 0) { this.soundUntil = this.now; this.log.push('sound stop'); return true; }
+        if (s === 2) { const vol = this.i8(p()); const path = this.str(p()); this.soundUntil = this.now + 100; this.log.push(`play ${path} ${vol}`); return true; }
+        const vol = this.i8(p()), freq = this.i16(p()), ms = this.i16(p()); this.soundUntil = this.now + ms; this.log.push(`tone ${freq} ${ms} ${vol}`); return true;
+      }
       case 0x96: return this.now >= this.soundUntil ? true : wait();
       case 0x9d: { p(); const port = this.i8(p()); p(); const mode = this.i8(p()); this.setF(p(), this.brick.sensor?.(port, mode) ?? 0); return true; }
       case 0xa3: { p(); const m = this.i8(p()); const brake = this.i8(p()); this.log.push(`stop ${ports(m)}${brake ? ' brake' : ''}`); busy(m, 0); return true; }

@@ -2,18 +2,19 @@ import * as Blockly from 'blockly/core';
 import 'blockly/blocks';
 import * as De from 'blockly/msg/de';
 import { defineBlocks } from '../blocks/definitions';
-import { compile } from '../blocks/generator';
+import { HAT_TYPES, compile } from '../blocks/generator';
 import { RbfError, compileRbf } from '../blocks/rbf';
 import { ascii } from '../ev3/assembler';
 import type { BrickFiles } from '../ev3/files';
-import { theme, toolbox } from '../blocks/toolbox';
+import { installToolbox, theme, toolbox } from '../blocks/toolbox';
+import { uploadSounds } from '../ev3/sounds';
 import { ProgramRun } from '../runtime/runner';
 import { state } from '../state';
 import { log } from './console';
 
 const PROJECTS_KEY = 'openstorm.projects';
 const CURRENT_KEY = 'openstorm.current';
-/** Disabled reason used by Blockly.Events.disableOrphans. */
+/** Disabled reason that earlier versions set on loose blocks (they were shown hatched). */
 const ORPHANED = 'ORPHANED_BLOCK';
 const projectKey = (id: string) => `openstorm.project.${id}`;
 
@@ -87,7 +88,7 @@ function load(id: string): void {
   try {
     workspace.clear();
     Blockly.serialization.workspaces.load(data, workspace);
-    greyOutOrphans();
+    enableOrphans();
   } finally {
     Blockly.Events.enable();
   }
@@ -177,9 +178,11 @@ export async function transferToEv3(): Promise<string | null> {
   if (!files) return null;
   save();
   let image: Uint8Array;
+  let sounds: string[];
   try {
     const result = compileRbf(workspace);
     image = result.image;
+    sounds = result.sounds;
     for (const warning of result.warnings) log(warning);
   } catch (e) {
     const block = e instanceof RbfError && e.blockId ? workspace.getBlockById(e.blockId) : null;
@@ -195,6 +198,7 @@ export async function transferToEv3(): Promise<string | null> {
   const path = `../prjs/${folder}/${folder}.rbf`;
   log(`Übertrage „${name}“ auf den EV3 …`);
   try {
+    await uploadSounds(files, sounds);
     await files.write(path, image);
     await files.write(`../prjs/${folder}/${SOURCE_FILE}`, new TextEncoder().encode(exportProject().json));
   } catch (e) {
@@ -267,8 +271,7 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
   else if (projects.length) load(projects[0].id);
   else newProject('Mein Roboter');
 
-  // Blocks not attached to a start block never run; greying them out shows that.
-  workspace.addChangeListener(Blockly.Events.disableOrphans);
+  installToolbox(workspace);
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   workspace.addChangeListener((e) => {
@@ -279,10 +282,10 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
   window.addEventListener('pagehide', save);
 }
 
-/** Same as Blockly.Events.disableOrphans, which only reacts to changes, for a loaded program. */
-function greyOutOrphans(): void {
-  for (const block of workspace.getTopBlocks(false)) {
-    if (block.previousConnection || block.outputConnection) block.setDisabledReason(true, ORPHANED);
+/** Loose blocks simply do not run; they keep their normal look. */
+function enableOrphans(): void {
+  for (const block of workspace.getAllBlocks(false)) {
+    if (block.hasDisabledReason(ORPHANED)) block.setDisabledReason(false, ORPHANED);
   }
 }
 
@@ -310,12 +313,12 @@ export async function startProgram(): Promise<void> {
   if (run) return;
   const { code, threads } = compile(workspace);
   if (threads === 0) {
-    log('Kein „Programmstart“-Block gefunden. Hänge deine Blöcke an einen Startblock.', 'error');
+    log('Kein Ereignisblock wie „Wenn Programm startet“ gefunden. Hänge deine Blöcke an einen solchen Block.', 'error');
     return;
   }
-  const starts = workspace.getTopBlocks(false).filter((b) => b.type === 'ev3_start');
-  if (starts.every((b) => !b.getNextBlock())) {
-    log('Unter „Programmstart“ hängen noch keine Blöcke. Ziehe Blöcke aus der Liste links darunter.', 'error');
+  const hats = workspace.getTopBlocks(false).filter((b) => HAT_TYPES.includes(b.type));
+  if (hats.every((b) => !b.getNextBlock())) {
+    log('Unter „Wenn Programm startet“ hängen noch keine Blöcke. Ziehe Blöcke aus der Liste links darunter.', 'error');
     return;
   }
   log(`Programm gestartet${threads > 1 ? ` (${threads} parallele Abläufe)` : ''}`);

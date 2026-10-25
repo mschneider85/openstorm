@@ -44,6 +44,11 @@ export class Command {
     return offset;
   }
 
+  /** Bytes of code so far (a direct command may hold about 1000). */
+  get size(): number {
+    return this.code.length;
+  }
+
   get globals(): number {
     return this.globalSize;
   }
