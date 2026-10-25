@@ -248,13 +248,21 @@ main {
 }
 
 .undo-btn {
+  display: grid;
+  place-items: center;
   width: 44px;
   height: 44px;
+  padding: 0;
   border-radius: 50%;
   border: 0;
   background: var(--soft);
-  font-size: 20px;
-  line-height: 1;
+  color: var(--text);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.undo-btn svg {
+  display: block;
 }
 
 .run-bar {

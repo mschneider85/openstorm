@@ -374,18 +374,19 @@ function scrollToStart(): void {
 function addUndoButtons(container: HTMLElement): void {
   const bar = document.createElement('div');
   bar.className = 'undo-bar';
-  const make = (label: string, title: string, redo: boolean) => {
+  const make = (path: string, title: string, redo: boolean) => {
     const b = document.createElement('button');
     b.className = 'undo-btn';
-    b.textContent = label;
+    // Drawn arrows: the ↶ ↷ glyphs sit oddly in the iPad's fonts.
+    b.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
     b.title = title;
     b.setAttribute('aria-label', title);
     b.addEventListener('click', () => workspace.undo(redo));
     bar.append(b);
     return b;
   };
-  const undo = make('↶', 'Rückgängig', false);
-  const redo = make('↷', 'Wiederholen', true);
+  const undo = make('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>', 'Rückgängig', false);
+  const redo = make('<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>', 'Wiederholen', true);
   const update = () => {
     undo.disabled = workspace.getUndoStack().length === 0;
     redo.disabled = workspace.getRedoStack().length === 0;
