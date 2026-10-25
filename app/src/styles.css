@@ -24,6 +24,8 @@
   color: var(--text);
   color-scheme: light;
   -webkit-tap-highlight-color: transparent;
+  /* No "copy / look up" callout when holding a finger on blocks or buttons. */
+  -webkit-touch-callout: none;
 }
 
 * {
@@ -77,8 +79,9 @@ button:disabled {
 
 .topbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
   padding: calc(8px + var(--safe-top)) 14px 8px;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
@@ -159,6 +162,15 @@ button:disabled {
   min-height: 40px;
 }
 
+.project-name-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-btn svg {
+  flex-shrink: 0;
+}
+
 .project-btn:hover {
   color: var(--text);
   background: var(--raised);
@@ -166,6 +178,20 @@ button:disabled {
 
 .spacer {
   flex: 1;
+}
+
+/* Connection and program buttons; in portrait they move to a second row. */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.conn-label {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .conn,
@@ -303,7 +329,7 @@ main {
 }
 
 .console.collapsed {
-  height: 44px;
+  height: calc(49px + env(safe-area-inset-bottom, 0px));
 }
 
 .console-head {
@@ -317,12 +343,27 @@ main {
   flex: 1;
 }
 
+/* Connection and program buttons; in portrait they move to a second row. */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.conn-label {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .console-title {
   border: 0;
   background: none;
   color: var(--muted);
   padding: 6px 4px;
-  min-width: 32px;
+  min-width: 40px;
+  min-height: 40px;
 }
 
 .console-title::before {
@@ -342,7 +383,8 @@ main {
   border: 0;
   border-bottom: 2px solid transparent;
   background: none;
-  padding: 5px 10px;
+  min-height: 40px;
+  padding: 5px 12px;
   color: var(--muted);
 }
 
@@ -517,7 +559,7 @@ main {
 }
 
 .btn.small {
-  min-height: 34px;
+  min-height: 40px;
   padding: 4px 10px;
   font-size: 13px;
 }

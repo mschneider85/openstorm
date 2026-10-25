@@ -264,6 +264,8 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
     toolbox,
     theme,
     renderer: 'zelos',
+    // Edit numbers and texts right in the block (with the number keyboard), not in a dialog.
+    modalInputs: false,
     trashcan: false,
     zoom: { controls: true, wheel: true, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
     move: { scrollbars: true, drag: true, wheel: true },

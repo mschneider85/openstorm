@@ -2,7 +2,7 @@
 <html lang="de">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="theme-color" content="#fcfcfa" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,11 +19,12 @@
         <button role="tab" data-tab="devices">Geräte</button>
       </nav>
       <button id="project-btn" class="project-btn" title="Projekte"></button>
-      <div class="spacer"></div>
-      <button id="connect-btn" class="conn" data-kind="none"><span class="dot"></span><span class="conn-label">Nicht verbunden</span></button>
-      <button id="transfer-btn" class="transfer" title="Programm auf den EV3 übertragen, damit er es ohne iPad ausführt">⇩ Auf EV3</button>
-      <button id="run-btn" class="run">▶ Start</button>
-      <button id="stop-btn" class="stop" disabled>■ Stopp</button>
+      <div class="actions">
+        <button id="connect-btn" class="conn" data-kind="none"><span class="dot"></span><span class="conn-label">Nicht verbunden</span></button>
+        <button id="transfer-btn" class="transfer" title="Programm auf den EV3 übertragen, damit er es ohne iPad ausführt">⇩ Auf EV3</button>
+        <button id="run-btn" class="run">▶ Start</button>
+        <button id="stop-btn" class="stop" disabled>■ Stopp</button>
+      </div>
     </header>
 
     <main>
@@ -55,6 +56,7 @@
     <dialog id="projects-dialog">
       <div class="dialog-head"><h2>Projekte</h2><button class="dialog-close" aria-label="Schließen">✕</button></div>
       <div class="dialog-body">
+        <p class="muted projects-hint">Deine Programme werden hier im Browser dieses iPads gespeichert, nicht auf dem EV3 und nicht in einem Ordner. Mit „Aktuelles exportieren“ sicherst du eins als Datei.</p>
         <div class="project-actions">
           <button id="project-new" class="btn primary">Neues Projekt</button>
           <button id="project-export" class="btn">Aktuelles exportieren</button>

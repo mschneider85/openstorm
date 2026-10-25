@@ -122,7 +122,9 @@ export function initDatalog(container: HTMLElement): void {
   };
   canvas.addEventListener('pointermove', move);
   canvas.addEventListener('pointerdown', move);
-  canvas.addEventListener('pointerleave', () => {
+  // A finger leaves the screen after every touch: keep the readout until the next one.
+  canvas.addEventListener('pointerleave', (e) => {
+    if (e.pointerType === 'touch') return;
     hoverX = null;
     schedule();
   });

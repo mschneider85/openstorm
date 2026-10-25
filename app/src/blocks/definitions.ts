@@ -85,7 +85,42 @@ type Def = Record<string, unknown> & { type: string };
 /** Blocks of one category with the same colour. */
 const group = (colour: string, defs: Def[]) => defs.map((d) => ({ colour, ...d }));
 
+/** On-screen keyboards on the iPad: numbers for number fields, no autocorrection for names. */
+function tuneKeyboards(): void {
+  type Widget = { widgetCreate_(): HTMLInputElement | HTMLTextAreaElement };
+  const text = Blockly.FieldTextInput.prototype as unknown as Widget;
+  const createText = text.widgetCreate_;
+  text.widgetCreate_ = function (this: Widget) {
+    const input = createText.call(this);
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('enterkeyhint', 'done');
+    return input;
+  };
+  // The German number keyboard types a decimal comma; Blockly would drop it ("0,5" → 5).
+  const validating = Blockly.FieldNumber.prototype as unknown as { doClassValidation_(v: unknown): unknown };
+  const validate = validating.doClassValidation_;
+  validating.doClassValidation_ = function (this: unknown, v: unknown) {
+    return validate.call(this, typeof v === 'string' ? v.replace(',', '.') : v);
+  };
+  const number = Blockly.FieldNumber.prototype as unknown as Widget;
+  const createNumber = number.widgetCreate_;
+  number.widgetCreate_ = function (this: Widget) {
+    const input = createNumber.call(this);
+    // "decimal" on the iPad: the number layout, which also has the minus sign.
+    input.setAttribute('inputmode', 'decimal');
+    input.setAttribute('enterkeyhint', 'done');
+    return input;
+  };
+}
+
+let tuned = false;
+
 export function defineBlocks(): void {
+  if (!tuned) {
+    tuned = true;
+    tuneKeyboards();
+  }
   // Decisions belong to the orange control category, as in EV3 Classroom.
   for (const type of ['controls_if', 'controls_flow_statements']) {
     const block = Blockly.Blocks[type];

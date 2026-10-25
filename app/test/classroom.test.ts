@@ -281,3 +281,13 @@ describe('review fixes', () => {
     expect(texts).toEqual(['x'.repeat(10)]);
   });
 });
+
+describe('iPad keyboard', () => {
+  it('reads a decimal comma as decimal point', () => {
+    const field = new Blockly.FieldNumber(0);
+    field.setValue('0,5');
+    expect(field.getValue()).toBe(0.5);
+    field.setValue('-12,25');
+    expect(field.getValue()).toBe(-12.25);
+  });
+});

@@ -15,7 +15,10 @@ const FOLDER_ICON =
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 const updateProjectName = () => {
   projectBtn.innerHTML = FOLDER_ICON;
-  projectBtn.append(currentProject()?.name ?? 'Projekt');
+  const name = document.createElement('span');
+  name.className = 'project-name-label';
+  name.textContent = currentProject()?.name ?? 'Projekt';
+  projectBtn.append(name);
 };
 
 initEditor($('#blockly'), updateProjectName);
