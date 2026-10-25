@@ -1,4 +1,4 @@
-/** Known EV3 device types and their modes (type numbers from the firmware). */
+/** Known EV3 device types and their modes (type numbers from the firmware), named like in the blocks. */
 export interface DeviceInfo {
   name: string;
   modes: { name: string; unit: string }[];
@@ -15,7 +15,7 @@ export const DEVICES: Record<number, DeviceInfo> = {
   7: {
     name: 'Großer Motor',
     modes: [
-      { name: 'Grad', unit: '°' },
+      { name: 'Gezählte Grad', unit: '°' },
       { name: 'Umdrehungen', unit: 'U' },
       { name: 'Geschwindigkeit', unit: '%' },
     ],
@@ -23,17 +23,17 @@ export const DEVICES: Record<number, DeviceInfo> = {
   8: {
     name: 'Mittlerer Motor',
     modes: [
-      { name: 'Grad', unit: '°' },
+      { name: 'Gezählte Grad', unit: '°' },
       { name: 'Umdrehungen', unit: 'U' },
       { name: 'Geschwindigkeit', unit: '%' },
     ],
   },
-  16: { name: 'Berührungssensor', modes: [{ name: 'Gedrückt', unit: '' }, { name: 'Zähler', unit: '' }] },
+  16: { name: 'Berührungssensor (Taster)', modes: [{ name: 'Gedrückt', unit: '' }, { name: 'Zähler', unit: '' }] },
   29: {
     name: 'Farbsensor',
     modes: [
-      { name: 'Reflektiert', unit: '%' },
-      { name: 'Umgebung', unit: '%' },
+      { name: 'Reflektiertes Licht', unit: '%' },
+      { name: 'Umgebungslicht', unit: '%' },
       { name: 'Farbe', unit: '' },
     ],
   },
@@ -41,7 +41,7 @@ export const DEVICES: Record<number, DeviceInfo> = {
     name: 'Ultraschallsensor',
     modes: [
       { name: 'Abstand', unit: 'cm' },
-      { name: 'Abstand', unit: 'inch' },
+      { name: 'Abstand', unit: 'Zoll' },
       { name: 'Ultraschall hören', unit: '' },
     ],
   },
@@ -49,20 +49,20 @@ export const DEVICES: Record<number, DeviceInfo> = {
     name: 'Gyrosensor',
     modes: [
       { name: 'Winkel', unit: '°' },
-      { name: 'Rate', unit: '°/s' },
+      { name: 'Drehrate', unit: '°/s' },
     ],
   },
   33: {
     name: 'Infrarotsensor',
     modes: [
       { name: 'Nähe', unit: '%' },
-      { name: 'Signal', unit: '' },
+      { name: 'Peilsignal', unit: '' },
       { name: 'Fernbedienung', unit: '' },
     ],
   },
 };
 
-export const COLOR_NAMES = ['Keine', 'Schwarz', 'Blau', 'Grün', 'Gelb', 'Rot', 'Weiß', 'Braun'];
+export const COLOR_NAMES = ['keine Farbe', 'Schwarz', 'Blau', 'Grün', 'Gelb', 'Rot', 'Weiß', 'Braun'];
 export const COLOR_CSS = ['transparent', '#111', '#1e5bd8', '#1a9b3c', '#f2c500', '#d2232a', '#fff', '#7b4a1e'];
 
 export function deviceName(type: number): string {

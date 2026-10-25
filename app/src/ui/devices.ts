@@ -1,6 +1,6 @@
 import { MOTOR_PORTS, type MotorPort, type Port, type PortState } from '../ev3/brick';
 import type { ButtonName, LedPattern } from '../ev3/bytecodes';
-import { COLOR_CSS, COLOR_NAMES, DEVICES, TYPE_NONE, deviceName, isMotorType } from '../ev3/devices';
+import { COLOR_CSS, COLOR_NAMES, DEVICES, INFRARED_CM_PER_PERCENT, TYPE_INFRARED, TYPE_NONE, deviceName, isMotorType } from '../ev3/devices';
 import { SimBrick } from '../ev3/simbrick';
 import { SCREEN_HEIGHT, SCREEN_WIDTH, renderScreen } from '../ev3/display';
 import { state } from '../state';
@@ -67,6 +67,8 @@ function formatValue(type: number, mode: number, value: number): string {
   if ((type === 16 || type === 1) && mode === 0) return value > 0.5 ? 'gedrückt' : 'nicht gedrückt';
   const unit = DEVICES[type]?.modes[mode]?.unit ?? '';
   const rounded = Math.abs(value) >= 100 || Number.isInteger(value) ? Math.round(value) : value.toFixed(1);
+  // The "Abstand" blocks turn the infrared proximity into centimetres; show that, too.
+  if (type === TYPE_INFRARED && mode === 0) return `${rounded} % · ≈ ${Math.round(value * INFRARED_CM_PER_PERCENT)} cm`;
   return `${rounded}${unit ? ' ' + unit : ''}`;
 }
 
@@ -116,7 +118,7 @@ function motorControls(port: MotorPort): HTMLElement {
     button('Zähler auf 0', 'btn ghost', () => act(state.brick?.motorResetCount([port]))),
   );
   const speedRow = el('label', 'speed-row');
-  speedRow.append('Tempo', speed, speedLabel);
+  speedRow.append('Geschwindigkeit', speed, speedLabel);
   box.append(speedRow, row);
   return box;
 }
