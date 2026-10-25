@@ -55,8 +55,14 @@ echo "PRETTY_HOSTNAME=OpenStorm" > /etc/machine-info
 echo openstorm > /etc/hostname
 sed -i 's/^127\.0\.1\.1.*/127.0.1.1\topenstorm/' /etc/hosts
 
-# Things the bridge does not need; they only slow down booting on a Pi Zero.
-for unit in apt-daily.timer apt-daily-upgrade.timer man-db.timer dphys-swapfile.service; do
+# The system log in memory only, to spare the SD card.
+install -d /etc/systemd/journald.conf.d
+install -m 644 "$DIR/openstorm-journald.conf" /etc/systemd/journald.conf.d/openstorm.conf
+rm -rf /var/log/journal
+
+# Things the bridge does not need; they only slow down booting on a Pi Zero (rsyslog,
+# if installed, would write the log to the SD card again).
+for unit in apt-daily.timer apt-daily-upgrade.timer man-db.timer dphys-swapfile.service rsyslog.service; do
   systemctl disable "$unit" 2>/dev/null || true
 done
 
@@ -64,6 +70,7 @@ done
 # bridge restarts itself afterwards.
 if [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true
+  systemctl restart systemd-journald 2>/dev/null || true
   nmcli connection reload 2>/dev/null || true
 fi
 # Lets the next update skip this script if none of the system files changed.
