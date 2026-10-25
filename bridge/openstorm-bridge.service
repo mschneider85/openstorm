@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenStorm-Bruecke (App <-> EV3)
+Description=OpenStorm bridge (app <-> EV3)
 After=bluetooth.service network.target
 Wants=bluetooth.service
 

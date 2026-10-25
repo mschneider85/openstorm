@@ -9,13 +9,13 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 PACKAGES="bluez python3-pip python3-dbus-next python3-aiohttp avahi-daemon rfkill openssh-server dnsmasq-base"
 BLESS_VERSION=0.3.0
 if ! dpkg -s $PACKAGES >/dev/null 2>&1; then
-  echo "Installiere Pakete …"
+  echo "Installing packages …"
   apt-get update
   apt-get install -y --no-install-recommends $PACKAGES
   apt-get clean
 fi
 if [ "$(pip3 show bless 2>/dev/null | sed -n 's/^Version: //p')" != "$BLESS_VERSION" ]; then
-  echo "Installiere bless $BLESS_VERSION …"
+  echo "Installing bless $BLESS_VERSION …"
   pip3 install --break-system-packages --no-cache-dir "bless==$BLESS_VERSION"
 fi
 
@@ -75,4 +75,4 @@ if [ -d /run/systemd/system ]; then
 fi
 # Lets the next update skip this script if none of the system files changed.
 python3 "$DIR/openstorm_bridge.py" --fingerprint "$DIR" > /opt/openstorm/SYSTEM
-echo "Installation fertig: $(cat "$DIR/VERSION" 2>/dev/null || echo dev)"
+echo "Installation done: $(cat "$DIR/VERSION" 2>/dev/null || echo dev)"

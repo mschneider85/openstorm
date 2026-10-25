@@ -1,6 +1,6 @@
 # Builds a ready-to-flash Raspberry Pi OS image (Pi Zero W) with the OpenStorm bridge.
 # Download: https://github.com/<owner>/<repo>/releases/download/pi-image/openstorm-pi.img.xz
-name: Raspberry-Pi-Image bauen
+name: Build Raspberry Pi image
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Brücke testen
+      - name: Test bridge
         working-directory: bridge
         run: |
           pip install aiohttp
@@ -39,7 +39,7 @@ jobs:
           cache-dependency-path: app/package-lock.json
 
       # The Pi serves the app itself on http://openstorm.local/ (base path "/").
-      - name: Web-App für den Pi bauen
+      - name: Build web app for the Pi
         working-directory: app
         run: |
           npm ci
@@ -48,7 +48,7 @@ jobs:
 
       # Running bridges update themselves from this release ("Aktualisieren" in the app),
       # see Updater in bridge/openstorm_bridge.py.
-      - name: Update-Paket veröffentlichen
+      - name: Publish update bundle
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -60,11 +60,11 @@ jobs:
             "$(sha256sum openstorm-update.tar.gz | cut -d' ' -f1)" > version.json
           cat version.json
           gh release view pi-update >/dev/null 2>&1 || gh release create pi-update \
-            --title "Update für die Raspberry-Pi-Brücke" --latest=false \
-            --notes "Wird von der Brücke selbst geladen (App → Verbindung → Aktualisieren)."
+            --title "Update for the Raspberry Pi bridge" --latest=false \
+            --notes "Downloaded by the bridge itself (app → Verbindung → Brücke aktualisieren)."
           gh release upload pi-update openstorm-update.tar.gz version.json --clobber
 
-      - name: Image bauen
+      - name: Build image
         id: build
         uses: pguyot/arm-runner-action@v2
         with:
@@ -87,8 +87,8 @@ jobs:
           xz -T0 -6 openstorm-pi.img
           ls -lh openstorm-pi.img.xz
 
-      # A fixed tag keeps the download link stable; "latest" stays reserved for the iPad app.
-      - name: Release veröffentlichen
+      # A fixed tag keeps the download link stable.
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -97,6 +97,6 @@ jobs:
             --target "${{ github.sha }}" \
             --title "Raspberry-Pi-Image (Pi Zero W)" \
             --latest=false \
-            --notes "OpenStorm-Brücke für den Raspberry Pi Zero W, Stand: $(git log -1 --format='%h %s')
+            --notes "OpenStorm bridge for the Raspberry Pi Zero W, built from: $(git log -1 --format='%h %s')
 
-          Mit dem Raspberry Pi Imager auf eine SD-Karte schreiben (\"Eigenes Image\"), siehe README."
+          Write it to an SD card with the Raspberry Pi Imager (\"Use custom\"), see README."

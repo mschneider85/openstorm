@@ -1,6 +1,6 @@
 # Publishes the web app to GitHub Pages: https://<owner>.github.io/<repo>/
 # On the iPad it is opened in the Bluefy browser, which supports Web Bluetooth.
-name: Web-App veröffentlichen
+name: Publish web app
 
 on:
   push:
