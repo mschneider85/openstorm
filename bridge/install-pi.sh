@@ -31,19 +31,18 @@ if [ -d "$DIR/www" ]; then
   cp -r "$DIR/www" /opt/openstorm/www
 fi
 
-# WLAN: the network from openstorm-wlan.txt on the boot partition (editable on any
-# PC), else the Pi opens its own network "OpenStorm" (password: openstorm).
+# WLAN: a known network, else the Pi opens its own network "OpenStorm" (password:
+# openstorm), where every name leads to the setup page (captive portal).
 install -d -m 700 /etc/NetworkManager/system-connections
 install -m 600 "$DIR/OpenStorm-Hotspot.nmconnection" /etc/NetworkManager/system-connections/
+install -d /etc/NetworkManager/dnsmasq-shared.d
+install -m 644 "$DIR/openstorm-captive.conf" /etc/NetworkManager/dnsmasq-shared.d/
 install -m 755 "$DIR/wlan-setup.sh" /opt/openstorm/
+install -m 644 "$DIR/wlan.html" /opt/openstorm/
 install -m 644 "$DIR/openstorm-wlan.service" /etc/systemd/system/
 systemctl enable openstorm-wlan.service
-for boot in /boot/firmware /boot; do
-  if [ -f "$boot/config.txt" ]; then
-    [ -f "$boot/openstorm-wlan.txt" ] || install -m 644 "$DIR/openstorm-wlan.txt" "$boot/"
-    break
-  fi
-done
+# Earlier versions read the home network from this file; NetworkManager keeps it now.
+rm -f /boot/firmware/openstorm-wlan.txt /boot/openstorm-wlan.txt
 # WLAN stays blocked until a country is set; the bridge unblocks it (see service).
 for cmdline in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
   if [ -f "$cmdline" ] && ! grep -q ieee80211_regdom "$cmdline"; then

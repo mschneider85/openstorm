@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenStorm WLAN (Heim-WLAN aus openstorm-wlan.txt oder eigenes WLAN)
+Description=OpenStorm WLAN (bekanntes WLAN oder eigenes WLAN zum Einrichten)
 After=NetworkManager.service
 Wants=NetworkManager.service
 

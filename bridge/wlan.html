@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#eceef1">
+<title>OpenStorm – WLAN</title>
+<!--
+  WLAN setup of the OpenStorm bridge, served by openstorm_bridge.py at /wlan.
+  iOS opens it by itself when the iPad joins the Pi's own network (captive portal),
+  so it stays a single page without the app and its scripts.
+-->
+<style>
+  :root {
+    --bg: #eceef1; --card: #fff; --soft: #f1f3f5; --line: #e3e7eb;
+    --text: #1d2329; --muted: #5b6570; --accent: #2a62c9; --accent-soft: #e8effb;
+    --ok: #1f9d55; --danger: #c4322b;
+    --sans: -apple-system, 'SF Pro Text', system-ui, 'Segoe UI', sans-serif;
+    --mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 var(--sans); }
+  main { max-width: 560px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 14px; }
+  .brand { font: 600 16px var(--mono); }
+  .brand::after { content: '_'; color: var(--accent); }
+  h1 { font-size: 24px; margin: 4px 0 0; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  p { margin: 0 0 8px; }
+  .card { background: var(--card); border-radius: 20px; padding: 18px; box-shadow: 0 1px 2px rgb(20 30 40 / 8%); }
+  .muted { color: var(--muted); }
+  .error { background: #fdecea; color: var(--danger); border-radius: 12px; padding: 10px 14px; }
+  .note { background: var(--accent-soft); border-radius: 12px; padding: 10px 14px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; background: var(--muted); }
+  .dot.client { background: var(--ok); }
+  .dot.hotspot { background: var(--accent); }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 999px; min-height: 44px; padding: 0 20px;
+           background: var(--soft); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); }
+  button:disabled { opacity: .45; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  .net { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border-radius: 12px;
+         background: none; padding: 0 12px; font-weight: 500; }
+  .net[aria-pressed="true"] { background: var(--accent-soft); font-weight: 600; }
+  .net .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+  .bars i { width: 4px; background: var(--line); border-radius: 1px; }
+  .bars i.on { background: var(--text); }
+  .row { display: flex; align-items: center; gap: 10px; min-height: 48px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row .name { flex: 1; }
+  form { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+  label { font-weight: 600; font-size: 14px; }
+  input { font: inherit; width: 100%; min-height: 46px; padding: 0 14px; border: 1px solid var(--line);
+          border-radius: 12px; background: var(--soft); color: var(--text); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  code { font-family: var(--mono); background: var(--soft); padding: 2px 6px; border-radius: 6px; }
+  a { color: var(--accent); font-weight: 600; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">&gt; openstorm</div>
+  <h1>WLAN der Brücke</h1>
+
+  <section class="card" id="status-card">
+    <p id="status" class="muted">Frage den Pi …</p>
+    <p id="error" class="error" hidden></p>
+    <div id="hotspot-help" hidden>
+      <p>Der Pi kennt hier noch kein WLAN. Wähle unten dein WLAN, dann kommt der Pi künftig von selbst hinein.</p>
+    </div>
+    <p id="back" hidden><a href="/">← Zurück zur App</a></p>
+  </section>
+
+  <section class="card" id="switching" hidden>
+    <h2>Der Pi wechselt das WLAN …</h2>
+    <p id="switching-text"></p>
+  </section>
+
+  <section class="card" id="choose">
+    <h2>WLAN hinzufügen</h2>
+    <ul id="networks"><li class="muted">Suche WLANs …</li></ul>
+    <div class="actions" style="margin-top:10px">
+      <button type="button" id="rescan">Neu suchen</button>
+      <button type="button" id="other">Anderes WLAN …</button>
+    </div>
+    <form id="join" hidden>
+      <div id="ssid-field" hidden>
+        <label for="ssid">Name des WLANs</label>
+        <input id="ssid" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div id="password-field">
+        <label for="password">Passwort für <span id="chosen"></span></label>
+        <input id="password" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <button class="primary" id="join-btn">Verbinden</button>
+    </form>
+  </section>
+
+  <section class="card" id="saved-card" hidden>
+    <h2>Gespeicherte WLANs</h2>
+    <p class="muted">Der Pi nimmt beim Einschalten das WLAN davon, das gerade erreichbar ist. Sonst öffnet er sein eigenes WLAN „OpenStorm“.</p>
+    <ul id="saved"></ul>
+  </section>
+
+  <section class="card" id="stay-card" hidden>
+    <h2>Ohne Heim-WLAN</h2>
+    <p>Du kannst OpenStorm auch direkt im WLAN „OpenStorm“ nutzen, zum Beispiel unterwegs.</p>
+    <button type="button" id="stay">Ohne Heim-WLAN weiter</button>
+    <p id="stay-done" class="note" hidden>Tippe oben rechts auf <b>Fertig</b> und öffne dann in Safari <code>http://10.42.0.1</code>.</p>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let chosen = null; // { ssid, secure } or { manual: true }
+  let mode = null;
+  const LOCK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-label="mit Passwort"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+
+  async function api(path, body) {
+    const res = await fetch('/api/wlan' + path, body === undefined ? {} : {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Fehler ' + res.status);
+    return data;
+  }
+
+  function bars(signal) {
+    const span = document.createElement('span');
+    span.className = 'bars';
+    span.setAttribute('aria-label', 'Empfang ' + signal + ' %');
+    [1, 2, 3, 4].forEach((n) => {
+      const i = document.createElement('i');
+      i.style.height = 3 + n * 3 + 'px';
+      if (signal >= n * 22) i.className = 'on';
+      span.append(i);
+    });
+    return span;
+  }
+
+  function choose(next, button) {
+    chosen = next;
+    document.querySelectorAll('.net').forEach((b) => b.setAttribute('aria-pressed', String(b === button)));
+    $('join').hidden = false;
+    $('ssid-field').hidden = !next.manual;
+    $('password-field').hidden = !next.manual && !next.secure;
+    $('chosen').textContent = next.manual ? 'das WLAN (leer lassen, wenn es keins hat)' : '„' + next.ssid + '“';
+    $('password').value = '';
+    (next.manual ? $('ssid') : $('password')).focus();
+  }
+
+  async function loadNetworks() {
+    $('rescan').disabled = true;
+    const list = $('networks');
+    try {
+      const { networks } = await api('/networks');
+      list.replaceChildren();
+      if (!networks.length) list.innerHTML = '<li class="muted">Keine WLANs gefunden. Tippe auf „Anderes WLAN …“ und gib den Namen selbst ein.</li>';
+      for (const n of networks) {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'net';
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.textContent = n.ssid;
+        b.append(name);
+        if (n.secure) b.insertAdjacentHTML('beforeend', LOCK);
+        b.append(bars(n.signal));
+        b.addEventListener('click', () => choose(n, b));
+        li.append(b);
+        list.append(li);
+      }
+      if (mode === 'hotspot') {
+        list.insertAdjacentHTML('beforeend', '<li class="muted" style="margin-top:6px;font-size:14px">Die Liste stammt vom Einschalten des Pi; solange er sein eigenes WLAN zeigt, kann er nicht neu suchen.</li>');
+      }
+    } catch (e) {
+      list.innerHTML = '';
+      const li = document.createElement('li');
+      li.className = 'error';
+      li.textContent = e.message;
+      list.append(li);
+    }
+    $('rescan').disabled = false;
+  }
+
+  function renderSaved(saved) {
+    $('saved-card').hidden = !saved.length;
+    const list = $('saved');
+    list.replaceChildren();
+    for (const s of saved) {
+      const li = document.createElement('li');
+      li.className = 'row';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = s.ssid + (s.active ? ' · verbunden' : '');
+      const forget = document.createElement('button');
+      forget.className = 'danger';
+      forget.textContent = 'Vergessen';
+      forget.addEventListener('click', async () => {
+        const warn = s.active ? '\n\nDer Pi verlässt dieses WLAN dann sofort. Kennt er kein anderes in Reichweite, öffnet er sein eigenes WLAN „OpenStorm“.' : '';
+        if (!confirm('„' + s.ssid + '“ vergessen?' + warn)) return;
+        try {
+          await api('/forget', { name: s.name });
+          await refresh();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+      li.append(name, forget);
+      list.append(li);
+    }
+  }
+
+  async function refresh() {
+    let status;
+    try {
+      status = await api('');
+    } catch (e) {
+      // While the Pi switches, its network may be gone for a moment.
+      return;
+    }
+    mode = status.mode;
+    $('status').innerHTML = '';
+    const dot = document.createElement('span');
+    dot.className = 'dot ' + status.mode;
+    const text = status.mode === 'client' ? 'Der Pi ist mit „' + status.ssid + '“ verbunden.'
+      : status.mode === 'hotspot' ? 'Der Pi zeigt sein eigenes WLAN „OpenStorm“.'
+      : 'Der Pi ist mit keinem WLAN verbunden.';
+    $('status').append(dot, text);
+    $('status').className = '';
+    $('error').hidden = !status.error;
+    $('error').textContent = status.error || '';
+    $('hotspot-help').hidden = status.mode !== 'hotspot';
+    $('stay-card').hidden = status.mode !== 'hotspot';
+    $('back').hidden = status.mode === 'hotspot';
+    $('rescan').hidden = status.mode === 'hotspot';
+    renderSaved(status.saved || []);
+  }
+
+  $('rescan').addEventListener('click', loadNetworks);
+  $('other').addEventListener('click', (e) => choose({ manual: true }, e.currentTarget));
+
+  $('join').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const ssid = chosen.manual ? $('ssid').value.trim() : chosen.ssid;
+    const password = $('password').value;
+    $('join-btn').disabled = true;
+    try {
+      const { switching } = await api('/join', { ssid, password });
+      if (!switching) {
+        alert('„' + ssid + '“ ist gespeichert. Der Pi nimmt es, sobald er dort eingeschaltet wird.');
+        $('join').hidden = true;
+        await refresh();
+        return;
+      }
+      $('choose').hidden = $('saved-card').hidden = $('stay-card').hidden = true;
+      $('switching').hidden = false;
+      $('switching-text').innerHTML = '';
+      const steps = [
+        'Der Pi verbindet sich jetzt mit „' + ssid + '“.' + (mode === 'hotspot' ? ' Sein WLAN „OpenStorm“ verschwindet dabei.' : ''),
+        'Verbinde das iPad wieder mit „' + ssid + '“ und öffne in Safari http://openstorm.local.',
+        'Klappt es nicht (z. B. falsches Passwort), öffnet der Pi nach etwa einer Minute wieder sein WLAN „OpenStorm“. Dann hier noch einmal versuchen.',
+      ];
+      for (const s of steps) {
+        const p = document.createElement('p');
+        p.textContent = s;
+        $('switching-text').append(p);
+      }
+      watchSwitch();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      $('join-btn').disabled = false;
+    }
+  });
+
+  /** Did it fail? Then the Pi's own network returns, and with it this page. */
+  function watchSwitch() {
+    const timer = setInterval(async () => {
+      let status;
+      try {
+        status = await api('');
+      } catch (e) {
+        return; // the Pi is switching
+      }
+      if (status.joining || status.mode !== 'hotspot') return;
+      clearInterval(timer);
+      $('switching').hidden = true;
+      $('choose').hidden = false;
+      $('join').hidden = true;
+      await refresh();
+    }, 3000);
+  }
+
+  $('stay').addEventListener('click', async () => {
+    try {
+      await api('/stay', {});
+      $('stay').hidden = true;
+      $('stay-done').hidden = false;
+    } catch (e) {
+      alert(e.message);
+    }
+  });
+
+  refresh().then(loadNetworks);
+</script>
+</body>
+</html>

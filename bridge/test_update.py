@@ -11,6 +11,7 @@ import openstorm_bridge as ob
 
 COMPLETE = {
     "openstorm_bridge.py": "NEW = 2\n",
+    "wlan.html": "<title>WLAN</title>",
     "install-pi.sh": "echo installing\n",
     "VERSION": "v2\n",
     "www/index.html": "new",
@@ -115,7 +116,7 @@ class UpdaterTest(unittest.TestCase):
         self.assertEqual(read(os.path.join(updater.app_dir, "openstorm_bridge.py")), "NEW = 2\n")
         self.assertEqual(read(os.path.join(updater.app_dir, "www", "index.html")), "new")
         self.assertEqual(ob.read_version(updater.app_dir), "v2")
-        self.assertEqual(sorted(os.listdir(updater.app_dir)), ["SYSTEM", "VERSION", "openstorm_bridge.py", "www"])
+        self.assertEqual(sorted(os.listdir(updater.app_dir)), ["SYSTEM", "VERSION", "openstorm_bridge.py", "wlan.html", "www"])
 
     def test_fingerprint_ignores_app_and_tests_but_not_system_files(self):
         a, b = tempfile.mkdtemp(), tempfile.mkdtemp()

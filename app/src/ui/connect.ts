@@ -250,7 +250,14 @@ async function fillDialog(): Promise<void> {
     const update = el('div', 'update', '');
     update.append(el('p', 'muted', 'Suche nach Updates …'));
     void showUpdate(bridgeUrl, update);
-    body.append(wlan, section('Brücke aktualisieren', update));
+    const wifi = el('a', 'btn', 'WLAN einrichten …');
+    wifi.href = `${location.origin}/wlan`;
+    const wifiSection = section(
+      'WLAN der Brücke',
+      el('p', 'muted', 'Weitere WLANs hinzufügen (z. B. für die Schule) oder gespeicherte vergessen.'),
+      wifi,
+    );
+    body.append(wlan, section('Brücke aktualisieren', update), wifiSection);
   }
   if (webBluetoothAvailable()) {
     body.append(

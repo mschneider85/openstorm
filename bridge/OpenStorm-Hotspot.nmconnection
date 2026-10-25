@@ -1,9 +1,8 @@
 [connection]
 id=OpenStorm-Hotspot
 type=wifi
-autoconnect=true
-# Lower than networks set up in the Raspberry Pi Imager (priority 0), so it is only a fallback.
-autoconnect-priority=-10
+# Opened by wlan-setup.sh (or the bridge) only when no known network is in range.
+autoconnect=false
 
 [wifi]
 mode=ap

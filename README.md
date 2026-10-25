@@ -41,13 +41,16 @@ Auf dem iPad muss **keine App installiert** werden.
 2. Den [Raspberry Pi Imager](https://www.raspberrypi.com/software/) öffnen und unter *Gerät* „Raspberry Pi Zero“ wählen.
 3. Unter *Betriebssystem* ganz unten **„Eigenes Image“** wählen und die heruntergeladene Datei angeben. Entpacken ist nicht nötig.
 4. SD-Karte wählen und schreiben. Die Frage nach „OS-Anpassungen“ mit *Nein* beantworten; bei eigenen Images ist das ohnehin ausgegraut.
-5. **Heim-WLAN eintragen (empfohlen):**
-   - Die SD-Karte nach dem Schreiben kurz aus- und wieder einstecken. Windows zeigt dann ein Laufwerk **„bootfs“**.
-   - Darin die Datei **`openstorm-wlan.txt`** mit dem Editor öffnen.
-   - `WLAN_NAME=` und `WLAN_PASSWORT=` ausfüllen und speichern.
-   - Ohne Eintrag oder wenn das WLAN nicht erreichbar ist, öffnet der Pi sein eigenes WLAN **„OpenStorm“** (Passwort `openstorm`). Während das iPad damit verbunden ist, hat es kein Internet.
-6. SD-Karte in den Pi stecken und Strom anschließen, über eine Powerbank oder den USB-Port des EV3.
+5. SD-Karte in den Pi stecken und Strom anschließen, über eine Powerbank oder den USB-Port des EV3.
    Nach etwa 1 Minute ist die Brücke bereit.
+6. **WLAN einrichten:**
+   - Beim ersten Start kennt der Pi noch kein WLAN. Er öffnet deshalb sein eigenes WLAN **„OpenStorm“** (Passwort `openstorm`).
+   - Das iPad in *Einstellungen → WLAN* mit „OpenStorm“ verbinden. Die Einrichtungsseite öffnet sich von selbst, sonst in Safari **http://10.42.0.1/wlan** öffnen.
+   - Dein WLAN auswählen, Passwort eingeben, **„Verbinden“**. Der Pi wechselt in dein WLAN, das iPad danach auch wieder.
+   - Klappt es nicht (z. B. falsches Passwort), öffnet der Pi nach etwa einer Minute wieder „OpenStorm“, und die Seite zeigt den Fehler.
+   - Ab dann nimmt der Pi beim Einschalten jedes gespeicherte WLAN, das erreichbar ist. Ist keins da, öffnet er wieder „OpenStorm“.
+   - Weitere WLANs (z. B. Schule) und gespeicherte WLANs verwalten: in der App *Verbindung → WLAN der Brücke* oder **http://openstorm.local/wlan**.
+   - Ohne Heim-WLAN geht es auch: auf der Einrichtungsseite **„Ohne Heim-WLAN weiter“** und die App unter **http://10.42.0.1** öffnen. Das iPad hat dann kein Internet.
 
 **Die grüne Leuchte am Pi:**
 - **langsames Blinken:** bereit, aber kein EV3 verbunden
@@ -83,9 +86,9 @@ Den EV3 **nicht** in den Bluetooth-Einstellungen des iPads koppeln, das übernim
 
 ### 5. Programme auf dem EV3
 
-- **Übertragen:** Projekte-Fenster (oben auf den Projektnamen tippen) → beim Projekt **„Exportieren“** → **„⇩ Auf den EV3“**. Die App fragt danach, ob das Programm gleich starten soll. „Als Datei sichern“ speichert dagegen nur die Blöcke auf dem iPad.
+- **Übertragen:** Projekte-Fenster (oben auf den Projektnamen tippen) → beim Projekt **„⇩ Auf den EV3“**. „Als Datei sichern“ (unter ⋯) speichert dagegen nur die Blöcke auf dem Gerät.
 - **Am Stein starten:** *Datei-Navigation* (zweiter Reiter) → Ordner mit dem Projektnamen → Programm. Mit der Zurück-Taste stoppen.
-- **Zurückholen:** *Projekte* → **„Programme auf dem EV3 anzeigen“** → **Öffnen**. Das geht, weil OpenStorm neben jedem Programm eine unsichtbare Kopie der Blöcke ablegt (`.openstorm`).
+- **Zurückholen:** Projekte-Fenster → **„Auf dem EV3“** → **„⇧ Aufs Gerät“**. Das geht, weil OpenStorm neben jedem Programm eine Kopie der Blöcke ablegt (`blocks.osb`), die das Menü am Stein nicht anzeigt.
 - Programme aus der originalen LEGO-Software lassen sich so nicht öffnen. Auf dem Stein liegt von ihnen nur das übersetzte Programm, nicht die Blöcke.
 - Messwerte werden auf dem EV3 nicht aufgezeichnet. Rekursive eigene Blöcke (ein Block ruft sich selbst auf) gehen dort nicht. Eine Variable muss entweder immer Text oder immer eine Zahl enthalten.
 
@@ -141,8 +144,10 @@ app/
 bridge/
   openstorm_bridge.py      Webserver + WebSocket (WLAN) und BLE-Dienst ⇄ RFCOMM (EV3),
                            koppelt den EV3 mit PIN 1234, steuert die Status-Leuchte
-  OpenStorm-Hotspot.nmconnection   eigenes WLAN, falls kein Heim-WLAN eingerichtet ist
-  openstorm-wlan.txt       Vorlage auf der SD-Karte für Heim-WLAN (wlan-setup.sh liest sie)
+  wlan.html                WLAN-Einrichtung (/wlan), öffnet sich im eigenen WLAN von selbst
+  wlan-setup.sh            beim Start: bekanntes WLAN, sonst das eigene WLAN „OpenStorm“
+  OpenStorm-Hotspot.nmconnection   eigenes WLAN, falls kein bekanntes erreichbar ist
+  openstorm-captive.conf   im eigenen WLAN führt jede Adresse zum Pi (Einrichtungsseite)
   install-pi.sh            Installation auf Raspberry Pi OS (auch für den Image-Build)
 ```
 

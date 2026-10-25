@@ -6,7 +6,7 @@ The app reaches the bridge in two ways:
 
 WLAN: the bridge serves the app itself on http://openstorm.local/ (Safari, no
   app needed). WebSocket /ws: binary messages are bytes for/from the EV3, text
-  messages are single JSON commands/events.
+  messages are single JSON commands/events. /wlan sets up the Pi's WLAN (see Wlan).
 
 Bluetooth LE (e.g. Bluefy browser), GATT service SERVICE_UUID:
   DATA_IN   write / write without response   bytes app -> EV3
@@ -69,6 +69,14 @@ APP_DIR = os.path.dirname(os.path.abspath(__file__))
 UPDATE_URL = os.environ.get(
     "OPENSTORM_UPDATE_URL", "https://github.com/mschneider85/openstorm/releases/download/pi-update/")
 ADAPTER_PATH = "/org/bluez/hci0"
+WLAN_DEVICE = "wlan0"
+HOTSPOT = "OpenStorm-Hotspot"
+HOTSPOT_SSID = "OpenStorm"
+HOTSPOT_ADDRESS = "10.42.0.1"
+# Written by wlan-setup.sh before the Pi opens its own network; it cannot scan then.
+NETWORKS_FILE = os.environ.get("OPENSTORM_NETWORKS", "/run/openstorm/networks")
+SWITCH_DELAY_SECONDS = 2
+FALLBACK_SECONDS = 25
 
 log = logging.getLogger("openstorm")
 
@@ -95,14 +103,14 @@ def unpack_bundle(data: bytes, sha256: str, dest: str) -> None:
             tar.extractall(dest, filter="data")
         else:  # Python < 3.12 without the security backport
             tar.extractall(dest)
-    for required in ("openstorm_bridge.py", "install-pi.sh", "VERSION", os.path.join("www", "index.html")):
+    for required in ("openstorm_bridge.py", "wlan.html", "install-pi.sh", "VERSION", os.path.join("www", "index.html")):
         if not os.path.isfile(os.path.join(dest, required)):
             raise ValueError("Update unvollständig ({} fehlt)".format(required))
     py_compile.compile(os.path.join(dest, "openstorm_bridge.py"), doraise=True)
 
 
 # What a quick update replaces; everything else in the bundle belongs to the system setup.
-APP_FILES = ("openstorm_bridge.py", "VERSION", "SYSTEM", "www")
+APP_FILES = ("openstorm_bridge.py", "wlan.html", "VERSION", "SYSTEM", "www")
 
 
 def system_fingerprint(directory: str) -> str:
@@ -121,13 +129,13 @@ def system_fingerprint(directory: str) -> str:
 
 
 def replace_app(new: str, app_dir: str) -> None:
-    """Quick update: swaps only the bridge script, VERSION and the web app."""
+    """Quick update: swaps only the bridge script, the WLAN page, VERSION and the web app."""
     www, old_www = os.path.join(app_dir, "www"), os.path.join(app_dir, "www.old")
     shutil.rmtree(old_www, ignore_errors=True)
     if os.path.isdir(www):
         os.rename(www, old_www)
     shutil.copytree(os.path.join(new, "www"), www)
-    for name in ("openstorm_bridge.py", "VERSION"):
+    for name in ("openstorm_bridge.py", "wlan.html", "VERSION"):
         shutil.copy(os.path.join(new, name), os.path.join(app_dir, name + ".new"))
         os.replace(os.path.join(app_dir, name + ".new"), os.path.join(app_dir, name))
     shutil.rmtree(old_www, ignore_errors=True)
@@ -431,9 +439,6 @@ class StatusLed:
             self._write("delay_off", "1800")
 
 
-# --- The bridge ---------------------------------------------------------------
-
-
 class Updater:
     """Fetches new versions of the bridge and the app from GitHub."""
 
@@ -497,6 +502,221 @@ def restart() -> None:
     else:
         script = os.path.join(APP_DIR, "openstorm_bridge.py")
         os.execv(sys.executable, [sys.executable, script])
+
+
+# --- WLAN: the Pi's own network for the setup, or the networks the user added -------
+
+
+def split_terse(line: str) -> List[str]:
+    """Splits a line of `nmcli -t` output; colons and backslashes in values are escaped."""
+    fields, current, escaped = [], "", False
+    for ch in line:
+        if escaped:
+            current += ch
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif ch == ":":
+            fields.append(current)
+            current = ""
+        else:
+            current += ch
+    fields.append(current)
+    return fields
+
+
+def terse_values(text: str) -> Dict[str, str]:
+    """`nmcli -t -f a,b ... show` output ("a:value" per line) as a dict."""
+    values = {}
+    for line in text.splitlines():
+        key, _, rest = line.partition(":")
+        values[key] = ":".join(split_terse(rest))
+    return values
+
+
+def parse_networks(text: str) -> List[Dict]:
+    """`nmcli -t -f SSID,SIGNAL,SECURITY device wifi list`: each network once, strongest first."""
+    best: Dict[str, Dict] = {}
+    for line in text.splitlines():
+        fields = split_terse(line)
+        if len(fields) < 3 or not fields[0]:
+            continue
+        ssid, signal = fields[0], int(fields[1]) if fields[1].isdigit() else 0
+        if ssid == HOTSPOT_SSID:
+            continue
+        if ssid not in best or signal > best[ssid]["signal"]:
+            best[ssid] = {"ssid": ssid, "signal": signal, "secure": fields[2] not in ("", "--")}
+    return sorted(best.values(), key=lambda n: -n["signal"])
+
+
+def check_wlan(ssid: str, password: str) -> None:
+    if not ssid or len(ssid.encode()) > 32:
+        raise RuntimeError("Bitte den Namen des WLANs angeben.")
+    if password and not 8 <= len(password) <= 63:
+        raise RuntimeError("Ein WLAN-Passwort hat 8 bis 63 Zeichen.")
+
+
+async def nmcli(*args: str, timeout: float = 30) -> str:
+    process = await asyncio.create_subprocess_exec(
+        "nmcli", *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+    try:
+        out, err = await asyncio.wait_for(process.communicate(), timeout)
+    except asyncio.TimeoutError:
+        process.kill()
+        raise RuntimeError("NetworkManager antwortet nicht")
+    if process.returncode:
+        raise RuntimeError(err.decode(errors="replace").strip() or "nmcli fehlgeschlagen")
+    return out.decode(errors="replace")
+
+
+class Wlan:
+    """The Pi's WLAN through NetworkManager.
+
+    Without a known network the Pi opens its own ("OpenStorm", see wlan-setup.sh);
+    the setup page (wlan.html) then adds the home network. Switching networks takes
+    the current one away, so answers go out first and the switch follows.
+    """
+
+    def __init__(self, run: Callable[..., Awaitable[str]] = nmcli, networks_file: str = NETWORKS_FILE) -> None:
+        self.run = run
+        self.networks_file = networks_file
+        self.joining: Optional[str] = None
+        self.error: Optional[str] = None
+
+    async def _active(self) -> str:
+        try:
+            out = await self.run("-t", "-f", "GENERAL.CONNECTION", "device", "show", WLAN_DEVICE)
+        except RuntimeError:
+            return ""
+        name = terse_values(out).get("GENERAL.CONNECTION", "")
+        return "" if name == "--" else name
+
+    async def _profile(self, name: str) -> Dict[str, str]:
+        out = await self.run("-t", "-f", "802-11-wireless.ssid,802-11-wireless.mode", "connection", "show", name)
+        values = terse_values(out)
+        return {"ssid": values.get("802-11-wireless.ssid", ""), "mode": values.get("802-11-wireless.mode", "")}
+
+    async def status(self) -> Dict:
+        active = await self._active()
+        if active == HOTSPOT:
+            mode, ssid = "hotspot", HOTSPOT_SSID
+        elif active:
+            mode, ssid = "client", (await self._profile(active))["ssid"] or active
+        else:
+            mode, ssid = "off", None
+        return {"mode": mode, "ssid": ssid, "joining": self.joining, "error": self.error}
+
+    async def saved(self) -> List[Dict]:
+        """Networks the Pi knows (also ones from the Raspberry Pi Imager), without its own."""
+        out = await self.run("-t", "-f", "NAME,TYPE", "connection", "show")
+        active = await self._active()
+        result = []
+        for line in out.splitlines():
+            fields = split_terse(line)
+            if len(fields) < 2 or fields[1] != "802-11-wireless" or fields[0] == HOTSPOT:
+                continue
+            profile = await self._profile(fields[0])
+            if profile["mode"] == "ap":
+                continue
+            result.append({"name": fields[0], "ssid": profile["ssid"] or fields[0], "active": fields[0] == active})
+        return result
+
+    async def networks(self) -> List[Dict]:
+        """Networks in range; while the Pi has its own network, the list from before it opened."""
+        try:
+            found = parse_networks(await self.run(
+                "-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list", "--rescan", "auto", timeout=20))
+        except RuntimeError:
+            found = []
+        if found:
+            return found
+        try:
+            with open(self.networks_file) as f:
+                return parse_networks(f.read())
+        except OSError:
+            return []
+
+    async def join(self, ssid: str, password: str) -> bool:
+        """Stores a network and switches to it. Returns False if it was only stored,
+        because the Pi is online and the network is not in range (e.g. the school's)."""
+        check_wlan(ssid, password)
+        if self.joining:
+            raise RuntimeError("Der Pi verbindet sich gerade mit „{}“.".format(self.joining))
+        mode = (await self.status())["mode"]
+        if mode == "client" and ssid not in [n["ssid"] for n in await self.networks()]:
+            await self._store(ssid, password)
+            return False
+        self.joining, self.error = ssid, None
+        asyncio.ensure_future(self._switch(ssid, password))
+        return True
+
+    async def _store(self, ssid: str, password: str) -> str:
+        """Adds a profile for the network and returns its name. Inactive profiles of the
+        same network go (e.g. with an old password); an active one only after switching."""
+        for profile in await self.saved():
+            if profile["ssid"] == ssid and not profile["active"]:
+                await self.run("connection", "delete", profile["name"])
+        taken = [p["name"] for p in await self.saved()]
+        name = ssid if ssid not in taken else ssid + " (neu)"
+        args = ["connection", "add", "type", "wifi", "con-name", name, "ifname", WLAN_DEVICE, "ssid", ssid,
+                "connection.autoconnect-priority", "10"]
+        if password:
+            args += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+        await self.run(*args)
+        return name
+
+    async def _switch(self, ssid: str, password: str) -> None:
+        await asyncio.sleep(SWITCH_DELAY_SECONDS)  # let the answer reach the app first
+        name = None
+        try:
+            name = await self._store(ssid, password)
+            await self.run("--wait", "45", "connection", "up", name, timeout=60)
+            for profile in await self.saved():
+                if profile["ssid"] == ssid and profile["name"] != name:
+                    await self.run("connection", "delete", profile["name"])
+            log.info("WLAN: connected to %s", ssid)
+        except RuntimeError as e:
+            log.warning("WLAN: connecting to %s failed: %s", ssid, e)
+            self.error = "Verbinden mit „{}“ hat nicht geklappt. Stimmt das Passwort?".format(ssid)
+            if name:
+                try:
+                    await self.run("connection", "delete", name)
+                except RuntimeError:
+                    pass
+            await self.fallback()
+        finally:
+            self.joining = None
+
+    async def forget(self, name: str) -> None:
+        if name == HOTSPOT:
+            raise RuntimeError("Das eigene WLAN des Pi bleibt immer.")
+        was_active = name == await self._active()
+        await self.run("connection", "delete", name)
+        if was_active:
+            await self.fallback()
+
+    async def fallback(self) -> None:
+        """Like at boot: a known network if one is in range, else the Pi's own network."""
+        for _ in range(FALLBACK_SECONDS):
+            if (await self.status())["mode"] == "client":
+                return
+            await asyncio.sleep(1)
+        # Its own network open, the Pi cannot scan; keep the list for the setup page.
+        try:
+            text = await self.run("-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list",
+                                  "--rescan", "yes", timeout=20)
+            os.makedirs(os.path.dirname(self.networks_file), exist_ok=True)
+            with open(self.networks_file, "w") as f:
+                f.write(text)
+        except (RuntimeError, OSError) as e:
+            log.warning("WLAN: scan before opening the own network failed: %s", e)
+        try:
+            await self.run("--wait", "30", "connection", "up", HOTSPOT, timeout=45)
+        except RuntimeError as e:
+            log.warning("WLAN: own network failed: %s", e)
+
+
+# --- The bridge ---------------------------------------------------------------
 
 
 class Bridge:
@@ -678,9 +898,79 @@ class BleFrontend:
             self.server.update_value(SERVICE_UUID, uuid)
 
 
-def make_web_app(bridge: Bridge, www_dir: str = WWW_DIR):
-    """WLAN access: serves the app and a WebSocket at /ws."""
+APPLE_SUCCESS = "<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"
+
+
+def is_own_host(host: Optional[str]) -> bool:
+    """Names the Pi answers to; in its own network every other name leads to it as well."""
+    if not host or host in ("openstorm", "localhost") or host.endswith(".local"):
+        return True
+    return all(part.isdigit() for part in host.split("."))  # an address typed in
+
+
+def make_web_app(bridge: Bridge, www_dir: str = WWW_DIR, wlan: Optional[Wlan] = None, page_dir: str = APP_DIR):
+    """WLAN access: serves the app, a WebSocket at /ws and the WLAN setup at /wlan.
+
+    In the Pi's own network every name resolves to the Pi (dnsmasq, see install-pi.sh).
+    The iPad's check for internet then gets the setup page, which iOS opens by
+    itself, until the user chooses to go on without a home network.
+    """
     from aiohttp import WSMsgType, web
+
+    wlan = wlan or Wlan()
+    without_home_wlan = set()  # addresses of devices that chose to stay in the Pi's network
+
+    @web.middleware
+    async def captive(request, handler):
+        if is_own_host(request.url.host):
+            return await handler(request)
+        if request.remote in without_home_wlan:
+            if request.path == "/generate_204":
+                return web.Response(status=204)
+            return web.Response(text=APPLE_SUCCESS, content_type="text/html")
+        raise web.HTTPFound("http://{}/wlan".format(HOTSPOT_ADDRESS))
+
+    async def json_body(request) -> Dict:
+        # Only JSON: a foreign web page cannot send that to the Pi without asking first (CORS).
+        if request.content_type != "application/json":
+            raise web.HTTPUnsupportedMediaType()
+        try:
+            return await request.json()
+        except ValueError:
+            raise web.HTTPBadRequest()
+
+    def wlan_api(action):
+        async def handle(request):
+            try:
+                return web.json_response(await action(request))
+            except RuntimeError as e:
+                return web.json_response({"error": str(e)}, status=400)
+        return handle
+
+    async def wlan_status(request):
+        return dict(await wlan.status(), saved=await wlan.saved())
+
+    async def wlan_networks(request):
+        return {"networks": await wlan.networks()}
+
+    async def wlan_join(request):
+        body = await json_body(request)
+        switching = await wlan.join(str(body.get("ssid", "")).strip(), str(body.get("password", "")))
+        return {"switching": switching}
+
+    async def wlan_forget(request):
+        await wlan.forget(str((await json_body(request)).get("name", "")))
+        return {}
+
+    async def wlan_stay(request):
+        await json_body(request)
+        without_home_wlan.add(request.remote)
+        return {}
+
+    async def wlan_page(request):
+        response = web.FileResponse(os.path.join(page_dir, "wlan.html"))
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
     async def websocket(request):
         ws = web.WebSocketResponse(heartbeat=20)
@@ -725,9 +1015,15 @@ def make_web_app(bridge: Bridge, www_dir: str = WWW_DIR):
             text = "journalctl failed: {}".format(e)
         return web.Response(text=text)
 
-    app = web.Application()
+    app = web.Application(middlewares=[captive])
     app.router.add_get("/ws", websocket)
     app.router.add_get("/log", show_log)
+    app.router.add_get("/wlan", wlan_page)
+    app.router.add_get("/api/wlan", wlan_api(wlan_status))
+    app.router.add_get("/api/wlan/networks", wlan_api(wlan_networks))
+    app.router.add_post("/api/wlan/join", wlan_api(wlan_join))
+    app.router.add_post("/api/wlan/forget", wlan_api(wlan_forget))
+    app.router.add_post("/api/wlan/stay", wlan_api(wlan_stay))
     app.router.add_get("/", index)
     if os.path.isdir(www_dir):
         app.router.add_static("/", www_dir)
