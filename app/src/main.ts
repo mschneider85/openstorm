@@ -70,7 +70,7 @@ state.subscribe(() => {
 });
 
 window.addEventListener('resize', resizeEditor);
-showInstallHint($('.topbar'), resizeEditor);
+showInstallHint();
 void autoConnect();
 
 // Offline support.

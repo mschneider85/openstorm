@@ -79,40 +79,6 @@ button:disabled {
 
 /* --- Top bar ------------------------------------------------------------- */
 
-.install-hint {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 14px;
-  margin: 0 20px 12px;
-  padding: 8px 8px 8px 18px;
-  background: var(--accent-soft);
-  border-radius: var(--radius);
-  flex-shrink: 0;
-}
-
-.install-hint p {
-  flex: 1;
-  min-width: 220px;
-  margin: 0;
-  line-height: 1.5;
-}
-
-.install-hint svg {
-  vertical-align: -3px;
-  color: var(--accent);
-}
-
-.install-hint button {
-  min-height: 40px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--card);
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .topbar {
   display: flex;
   flex-wrap: wrap;
@@ -885,6 +851,76 @@ input[type='range'] {
 .ev3-btn-enter { grid-area: enter; }
 
 /* --- Dialogs ------------------------------------------------------------- */
+
+/* "Add to home screen" on iOS, see install-hint.ts. */
+dialog.install-hint {
+  width: min(440px, calc(100vw - 32px));
+  padding: 28px 26px 22px;
+  text-align: center;
+}
+
+.install-hint img {
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.install-hint h2 {
+  margin: 12px 0 6px;
+  font-size: 22px;
+}
+
+.install-hint > p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.install-hint ol {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.install-hint li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--soft);
+  border-radius: var(--radius);
+  line-height: 1.35;
+}
+
+.install-hint small {
+  display: block;
+  color: var(--muted);
+}
+
+.step-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--accent);
+}
+
+.install-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.install-actions .btn {
+  min-height: 48px;
+  border-radius: 999px;
+}
 
 dialog {
   border: 0;
