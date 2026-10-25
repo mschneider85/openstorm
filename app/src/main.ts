@@ -5,6 +5,7 @@ import { clearValues, downloadCsv, initDatalog } from './ui/datalog';
 import { autoConnect, initConnect, openConnectDialog } from './ui/connect';
 import { initDevices, setDevicesVisible } from './ui/devices';
 import { currentProject, initEditor, resizeEditor, startProgram, stopProgram } from './ui/editor';
+import { showInstallHint } from './ui/install-hint';
 import { initProjects, openProjectsDialog } from './ui/projects';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
@@ -64,6 +65,7 @@ state.subscribe(() => {
 });
 
 window.addEventListener('resize', resizeEditor);
+showInstallHint($('.topbar'), resizeEditor);
 void autoConnect();
 
 // Offline support.

@@ -79,6 +79,40 @@ button:disabled {
 
 /* --- Top bar ------------------------------------------------------------- */
 
+.install-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 20px 12px;
+  padding: 8px 8px 8px 18px;
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+
+.install-hint p {
+  flex: 1;
+  min-width: 220px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.install-hint svg {
+  vertical-align: -3px;
+  color: var(--accent);
+}
+
+.install-hint button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--card);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .topbar {
   display: flex;
   flex-wrap: wrap;
@@ -514,6 +548,13 @@ main {
   padding: 0 16px;
   min-height: 44px;
   font-weight: 600;
+}
+
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
 }
 
 .btn:active,
