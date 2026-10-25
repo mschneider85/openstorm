@@ -31,10 +31,17 @@
         <div id="blockly"></div>
         <aside id="console" class="console">
           <div class="console-head">
-            <button id="console-toggle" class="console-title">Ausgabe</button>
+            <button id="console-toggle" class="console-title" aria-label="Bereich ein- oder ausklappen"></button>
+            <div class="console-views" role="tablist">
+              <button role="tab" data-view="output" class="active">Ausgabe</button>
+              <button role="tab" data-view="datalog">Messwerte</button>
+            </div>
+            <div class="spacer"></div>
+            <button id="datalog-csv" class="btn ghost small" hidden>Als Tabelle speichern</button>
             <button id="console-clear" class="btn ghost small">Leeren</button>
           </div>
           <div id="console-lines" class="console-lines"></div>
+          <div id="datalog" class="datalog" hidden></div>
         </aside>
       </section>
       <section id="tab-devices" class="tab"></section>

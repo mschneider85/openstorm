@@ -18,3 +18,14 @@ export function log(text: string, kind: LogKind = 'info'): void {
 export function clearLog(): void {
   list().replaceChildren();
 }
+
+/** Shows the output lines or the chart of recorded values; the chart gets more room. */
+export function showView(view: 'output' | 'datalog'): void {
+  const panel = document.getElementById('console')!;
+  panel.classList.remove('collapsed');
+  panel.classList.toggle('wide', view === 'datalog');
+  document.querySelectorAll<HTMLElement>('[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  list().hidden = view !== 'output';
+  document.getElementById('datalog')!.hidden = view !== 'datalog';
+  document.getElementById('datalog-csv')!.hidden = view !== 'datalog';
+}

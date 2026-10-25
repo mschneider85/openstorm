@@ -1,7 +1,8 @@
 import { Capacitor } from '@capacitor/core';
 import './styles.css';
 import { state } from './state';
-import { clearLog } from './ui/console';
+import { clearLog, showView } from './ui/console';
+import { clearValues, downloadCsv, initDatalog } from './ui/datalog';
 import { autoConnect, initConnect, openConnectDialog } from './ui/connect';
 import { initDevices, setDevicesVisible } from './ui/devices';
 import { currentProject, initEditor, resizeEditor, startOnEv3, startProgram, stopProgram, transferToEv3 } from './ui/editor';
@@ -18,6 +19,7 @@ const updateProjectName = () => {
 };
 
 initEditor($('#blockly'), updateProjectName);
+initDatalog($('#datalog'));
 initDevices($('#tab-devices'));
 initConnect($<HTMLDialogElement>('#connect-dialog'));
 initProjects($<HTMLDialogElement>('#projects-dialog'));
@@ -48,7 +50,14 @@ $('#transfer-btn').addEventListener('click', async () => {
     btn.disabled = state.running;
   }
 });
-$('#console-clear').addEventListener('click', clearLog);
+$('#console-clear').addEventListener('click', () => ($('#datalog').hidden ? clearLog() : clearValues()));
+$('#datalog-csv').addEventListener('click', downloadCsv);
+for (const view of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {
+  view.addEventListener('click', () => {
+    showView(view.dataset.view as 'output' | 'datalog');
+    setTimeout(resizeEditor, 220);
+  });
+}
 $('#console-toggle').addEventListener('click', () => {
   $('#console').classList.toggle('collapsed');
   setTimeout(resizeEditor, 220);

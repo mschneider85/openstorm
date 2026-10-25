@@ -10,7 +10,8 @@ import { installToolbox, theme, toolbox } from '../blocks/toolbox';
 import { uploadSounds } from '../ev3/sounds';
 import { ProgramRun } from '../runtime/runner';
 import { state } from '../state';
-import { log } from './console';
+import { log, showView } from './console';
+import { MAX_SERIES, addValue, clearValues } from './datalog';
 
 const PROJECTS_KEY = 'openstorm.projects';
 const CURRENT_KEY = 'openstorm.current';
@@ -322,6 +323,12 @@ export async function startProgram(): Promise<void> {
     return;
   }
   log(`Programm gestartet${threads > 1 ? ` (${threads} parallele Abläufe)` : ''}`);
+  // A program that records values starts a fresh chart and shows it.
+  if (workspace.getAllBlocks(false).some((b) => b.type === 'ev3_log' && b.isEnabled())) {
+    clearValues();
+    showView('datalog');
+  }
+  let tooManySeries = false;
   clearHighlights();
   state.setRunning(true);
   run = new ProgramRun(brick, code, {
@@ -333,6 +340,13 @@ export async function startProgram(): Promise<void> {
       highlighted.set(root, id);
     },
     onPrint: (text) => log(text, 'output'),
+    onLog: (name, t, value) => {
+      if (!addValue(name, t, value) && !tooManySeries) {
+        tooManySeries = true;
+        log(`Höchstens ${MAX_SERIES} Messreihen: „${name}“ wird nicht aufgezeichnet.`, 'error');
+      }
+    },
+    onLogClear: clearValues,
   });
   const current = run;
   try {

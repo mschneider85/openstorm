@@ -165,6 +165,8 @@ const blocks: Record<string, (b: B, g: Gen) => string | [string, Order] | null> 
   ev3_list_value: (b, g) => call(`api.listText(${list(b, g)})`),
 
   ev3_print: (b, g) => `api.print(${val(b, g, 'VALUE')});\n`,
+  ev3_log: (b, g) => `api.logValue(${field(b, 'NAME')}, ${num(b, g, 'VALUE')});\n`,
+  ev3_log_clear: () => 'api.clearLog();\n',
 
   // Older OpenStorm blocks
   ev3_motor_on: (b, g) => `await api.motorOn(${ports(b)}, ${num(b, g, 'SPEED', '50')});\n`,

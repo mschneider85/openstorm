@@ -241,8 +241,146 @@ main {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+.console.wide {
+  height: 300px;
+}
+
 .console.collapsed {
   height: 40px;
+}
+
+.console-head .spacer {
+  flex: 1;
+}
+
+.console-head {
+  gap: 6px;
+}
+
+.console-views {
+  display: flex;
+  gap: 2px;
+  background: #eef1f4;
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.console-views button {
+  border: 0;
+  background: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.console-views button.active {
+  background: var(--card);
+  color: inherit;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+
+.collapsed .console-lines,
+.collapsed .datalog {
+  display: none;
+}
+
+/* --- Messwerte ------------------------------------------------------------ */
+
+.datalog {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 8px;
+}
+
+.datalog[hidden] {
+  display: none;
+}
+
+.datalog-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+  color: #52514e;
+  min-height: 20px;
+}
+
+.datalog-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.datalog-latest {
+  color: #0b0b0b;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.datalog-key {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.datalog-plot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.datalog-plot canvas {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.datalog-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 24px;
+  color: var(--muted);
+}
+
+.datalog-empty[hidden],
+.datalog-tooltip[hidden] {
+  display: none;
+}
+
+.datalog-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--card);
+  border: 1px solid #e1e0d9;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  white-space: nowrap;
+}
+
+.datalog-tip-time {
+  color: #898781;
+  margin-bottom: 2px;
+}
+
+.datalog-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.datalog-tip-row strong {
+  font-variant-numeric: tabular-nums;
+  min-width: 3ch;
 }
 
 .console-head {
@@ -774,4 +912,8 @@ dialog::backdrop {
 }
 .blocklyFlyoutButton:hover .blocklyFlyoutButtonBackground {
   fill: #eef1f4;
+}
+
+.console [hidden] {
+  display: none !important;
 }

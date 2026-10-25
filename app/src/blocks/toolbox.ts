@@ -191,6 +191,18 @@ export const toolbox: Blockly.utils.toolbox.ToolboxDefinition = {
     { kind: 'category', name: 'Meine Blöcke', colour: COLORS.myBlocks, custom: 'PROCEDURE' },
     {
       kind: 'category',
+      name: 'Messwerte',
+      colour: COLORS.datalog,
+      contents: [
+        label('Nur mit ▶ Start in der App'),
+        block('ev3_log', { VALUE: { ...n(0), block: { type: 'ev3_reflected', fields: { PORT: '3' } } } }, { NAME: 'Licht' }),
+        block('ev3_log', { VALUE: { ...n(0), block: { type: 'ev3_distance', fields: { PORT: '4' } } } }, { NAME: 'Abstand' }),
+        block('ev3_log', { VALUE: n(0) }),
+        block('ev3_log_clear'),
+      ],
+    },
+    {
+      kind: 'category',
       name: 'App',
       colour: COLORS.app,
       contents: [block('ev3_print', { VALUE: t('Hallo') })],

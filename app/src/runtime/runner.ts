@@ -31,6 +31,9 @@ const BUTTON_NUMBERS: [ButtonName, number][] = [['left', 1], ['enter', 2], ['rig
 export interface RunHooks {
   onStep: (blockId: string) => void;
   onPrint: (text: string) => void;
+  /** "zeichne … auf": a value of a series, `t` seconds after the program started. */
+  onLog?: (name: string, t: number, value: number) => void;
+  onLogClear?: () => void;
 }
 
 /** One running stack; stopping it ends only this stack. */
@@ -42,6 +45,7 @@ interface Run {
 /** State of a program that all its stacks share (motor settings, sensor calibration, ...). */
 class Program {
   startTime = performance.now();
+  readonly began = performance.now();
   motors = Object.fromEntries(MOTOR_PORTS.map((p) => [p, { speed: 75, hold: true }])) as Record<MotorPort, { speed: number; hold: boolean }>;
   move = { left: 'B' as MotorPort, right: 'C' as MotorPort, speed: 50, hold: true, cmPerRotation: 17.6 };
   volume = 100;
@@ -736,6 +740,16 @@ export class ProgramApi {
 
   listText(list: unknown[]): string {
     return list.map(formatValue).join(' ');
+  }
+
+  logValue(name: string, value: unknown): void {
+    this.check();
+    this.p.hooks.onLog?.(String(name), (performance.now() - this.p.began) / 1000, Number(value));
+  }
+
+  clearLog(): void {
+    this.check();
+    this.p.hooks.onLogClear?.();
   }
 
   print(value: unknown): void {

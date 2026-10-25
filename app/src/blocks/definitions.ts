@@ -15,6 +15,7 @@ export const COLORS = {
   variables: '#ff8c1a',
   lists: '#ff661a',
   myBlocks: '#ff6680',
+  datalog: '#0fbd8c',
   app: '#7a8794',
 };
 
@@ -679,6 +680,22 @@ export function defineBlocks(): void {
       { type: 'ev3_list_length', message0: 'Länge von %1', args0: [listField()], ...reporter('Number') },
       { type: 'ev3_list_contains', message0: '%1 enthält %2 ?', args0: [listField(), value('ITEM')], ...reporter('Boolean') },
       { type: 'ev3_list_value', message0: '%1', args0: [listField()], ...reporter('String'), tooltip: 'Alle Elemente der Liste, mit Leerzeichen getrennt.' },
+    ]),
+
+    // --- Messwerte (only in the app) -----------------------------------------------------
+    ...group(COLORS.datalog, [
+      {
+        type: 'ev3_log',
+        message0: 'zeichne %1 als %2 auf',
+        args0: [number('VALUE'), text('NAME', 'Messwert')],
+        ...statement,
+        tooltip: 'Fügt den Wert dem Diagramm unter „Messwerte“ hinzu. Gleiche Namen bilden eine Linie (höchstens 8).',
+      },
+      {
+        type: 'ev3_log_clear',
+        message0: 'lösche alle Messwerte',
+        ...statement,
+      },
     ]),
 
     // --- App -------------------------------------------------------------------------

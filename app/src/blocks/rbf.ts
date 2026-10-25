@@ -1413,6 +1413,10 @@ class Compiler {
       case 'ev3_print':
         this.warnings.add('„in der App ausgeben“ hat auf dem EV3 keine Wirkung (es gibt dort keine App-Ausgabe).');
         return;
+      case 'ev3_log':
+      case 'ev3_log_clear':
+        this.warnings.add('Messwerte werden auf dem EV3 nicht aufgezeichnet, nur wenn das Programm mit ▶ Start in der App läuft.');
+        return;
     }
     throw new RbfError(`Der Block „${blockLabel(block)}“ kann noch nicht auf den EV3 übertragen werden.`, block.id);
   }
