@@ -2,6 +2,8 @@
 
 Block programming for LEGO MINDSTORMS EV3 on the iPad, without a Mac, without cables and without a paid Apple developer account.
 
+**Website with download and setup guide (German): https://mschneider85.github.io/openstorm/**
+
 The app itself is in German. Labels in quotes below are the German texts as they appear on screen.
 
 - **Program**: Programming with blocks as in LEGO Education EV3 Classroom (Scratch), with the same categories and colors: motors, movement, display, sound, events, control, sensors, operators, variables and lists, My Blocks. All event blocks („Wenn Programm startet“, „Wenn Berührungssensor gedrückt“, „Wenn ich Nachricht empfange“ …) run at the same time.
@@ -107,9 +109,9 @@ Do **not** pair the EV3 in the iPad's Bluetooth settings; the Pi does that.
 | Device | Connection |
 |---|---|
 | iPad with Safari | via the Pi bridge over WLAN (see above) |
-| iPad with [Bluefy](https://apps.apple.com/de/app/id1492822055) | via the Pi bridge over Bluetooth LE: https://mschneider85.github.io/openstorm/ |
-| PC/Mac with Chrome or Edge | via the Pi bridge (Web Bluetooth) or directly via the Bluetooth COM port of the paired EV3 (Web Serial) |
-| Any browser | simulator |
+| iPad with [Bluefy](https://apps.apple.com/de/app/id1492822055) | via the Pi bridge over Bluetooth LE: https://mschneider85.github.io/openstorm/app/ |
+| PC/Mac with Chrome or Edge | https://mschneider85.github.io/openstorm/app/, via the Pi bridge (Web Bluetooth) or directly via the Bluetooth COM port of the paired EV3 (Web Serial) |
+| Any browser | simulator, at https://mschneider85.github.io/openstorm/app/ |
 
 ## Development (Linux/WSL/Windows)
 
@@ -128,7 +130,7 @@ On every push to `main`, GitHub builds automatically:
 
 | Workflow | Result |
 |---|---|
-| `pages.yml` | web app at https://mschneider85.github.io/openstorm/ |
+| `pages.yml` | landing page (`site/`) at https://mschneider85.github.io/openstorm/, the web app below it at `app/` |
 | `pi-image.yml` | SD card image incl. web app as release `pi-image`, update bundle for running Pis as release `pi-update` |
 
 The bridge can also be installed on an existing Raspberry Pi OS: `sudo sh bridge/install-pi.sh`.
@@ -137,6 +139,7 @@ The bridge can also be installed on an existing Raspberry Pi OS: `sudo sh bridge
 ## Structure
 
 ```
+site/               landing page on GitHub Pages (German): download and setup guide
 app/
   src/ev3/          EV3 protocol: bytecode assembler, direct commands, file transfer, simulator
   src/transport/    connections: Pi bridge (WLAN and Web Bluetooth), Web Serial

@@ -1,11 +1,12 @@
-# Publishes the web app to GitHub Pages: https://<owner>.github.io/<repo>/
-# On the iPad it is opened in the Bluefy browser, which supports Web Bluetooth.
-name: Publish web app
+# Publishes the landing page (site/) to GitHub Pages: https://<owner>.github.io/<repo>/
+# The web app goes below it, at app/: for the simulator, PCs (Web Serial) and Bluefy.
+# On the iPad the app comes from the Raspberry Pi bridge.
+name: Publish landing page
 
 on:
   push:
     branches: [main]
-    paths: ['app/**', '.github/workflows/pages.yml']
+    paths: ['site/**', 'app/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:
@@ -32,10 +33,14 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm test
-      - run: npm run build -- --base=/${{ github.event.repository.name }}/
+      - run: npm run build -- --base=/${{ github.event.repository.name }}/app/
+      - name: Put the landing page and the app together
+        run: |
+          cp -r ../site ../_site
+          cp -r dist ../_site/app
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: app/dist
+          path: _site
 
   deploy:
     needs: build

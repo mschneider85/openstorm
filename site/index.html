@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>OpenStorm – Blockprogrammierung für LEGO MINDSTORMS EV3 auf dem iPad</title>
+  <meta name="description" content="Programmiere deinen LEGO MINDSTORMS EV3 mit Blöcken wie in EV3 Classroom – auf dem iPad, ohne Kabel und ohne App-Store. Ein Raspberry Pi Zero W verbindet iPad und EV3.">
+  <meta name="theme-color" content="#eceef1">
+  <meta property="og:title" content="OpenStorm">
+  <meta property="og:description" content="Blockprogrammierung für LEGO MINDSTORMS EV3 auf dem iPad.">
+  <meta property="og:image" content="img/editor.webp">
+  <link rel="icon" href="app/favicon.ico" sizes="any">
+  <link rel="icon" href="app/logo.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="app/apple-touch-icon-180x180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="OpenStorm, nach oben">&gt; openstorm<span class="cursor">_</span></a>
+      <nav class="nav-links" aria-label="Seiten-Navigation">
+        <a href="#so-gehts">So geht's</a>
+        <a href="#einrichten">Einrichten</a>
+        <a href="#erstes-programm">Erstes Programm</a>
+        <a href="#hilfe">Hilfe</a>
+      </nav>
+      <a class="btn btn-dark btn-small" href="#download">Download</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="dot"></span>Für LEGO® MINDSTORMS® EV3</p>
+          <h1>Blöcke ziehen.<br><span class="grad">Roboter fährt.</span></h1>
+          <p class="lead">OpenStorm bringt die Blockprogrammierung von EV3 Classroom aufs iPad – ohne Kabel, ohne App-Store und ohne Mac. Ein kleiner Raspberry Pi verbindet iPad und EV3.</p>
+          <div class="cta" id="download">
+            <a class="btn btn-primary" href="https://github.com/mschneider85/openstorm/releases/download/pi-image/openstorm-pi.img.xz">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14"/></svg>
+              Pi-Image herunterladen
+            </a>
+            <a class="btn btn-ghost" href="#einrichten">Zur Anleitung</a>
+          </div>
+          <p class="release" id="release">Raspberry Pi OS mit OpenStorm-Brücke · etwa 600 MB · <a href="https://github.com/mschneider85/openstorm/releases/tag/pi-image">Release ansehen</a></p>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="float-block b-events">Wenn Programm startet</div>
+          <div class="float-block b-move">fahre ⬆ vorwärts für <i>20</i> cm</div>
+          <div class="float-block b-sound">spiele Klang <i>Hupe</i></div>
+          <div class="ipad">
+            <img src="img/editor.webp" width="1600" height="1118" alt="">
+          </div>
+        </div>
+      </div>
+      <ul class="wrap pills" aria-label="Vorteile">
+        <li>Ohne Kabel</li>
+        <li>Ohne App-Store</li>
+        <li>Ohne Mac</li>
+        <li>Ohne Konto</li>
+        <li>Läuft in Safari</li>
+      </ul>
+    </section>
+
+    <!-- How it works -->
+    <section class="section" id="so-gehts">
+      <div class="wrap">
+        <p class="kicker">So funktioniert's</p>
+        <h2>Das iPad spricht WLAN, der EV3 Bluetooth.<br>Der Pi übersetzt.</h2>
+        <p class="section-lead">Safari kann kein Bluetooth, und der EV3 versteht nur Bluetooth Classic. Ein Raspberry Pi Zero W sitzt dazwischen: Er liefert die App aus und leitet jeden Befehl an den EV3 weiter. Auf dem iPad wird nichts installiert.</p>
+
+        <div class="flow">
+          <div class="node">
+            <div class="node-icon">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="9" y="5" width="30" height="38" rx="5"/><circle cx="24" cy="38" r="1.6" class="fill"/></svg>
+            </div>
+            <h3>iPad</h3>
+            <p>Safari öffnet<br><code>openstorm.local</code></p>
+          </div>
+          <div class="link"><span>WLAN</span></div>
+          <div class="node node-accent">
+            <div class="node-icon">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="14" width="40" height="20" rx="3"/><rect x="10" y="20" width="9" height="8" rx="1" class="fill"/><circle cx="34" cy="24" r="2" class="fill-ok"/></svg>
+            </div>
+            <h3>Raspberry Pi Zero W</h3>
+            <p>Die OpenStorm-Brücke</p>
+          </div>
+          <div class="link"><span>Bluetooth</span></div>
+          <div class="node">
+            <div class="node-icon">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="11" y="4" width="26" height="40" rx="5"/><rect x="15" y="9" width="18" height="12" rx="1.5" class="fill-screen"/><circle cx="24" cy="30" r="4" class="fill-ok"/></svg>
+            </div>
+            <h3>LEGO EV3</h3>
+            <p>Motoren &amp; Sensoren</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section section-tight">
+      <div class="wrap">
+        <p class="kicker">Was drin ist</p>
+        <h2>Alles, was man aus EV3 Classroom kennt.</h2>
+        <div class="features">
+          <article class="feature" style="--c:#ffbf00">
+            <span class="swatch"></span>
+            <h3>Blöcke wie im Original</h3>
+            <p>Gleiche Kategorien und Farben: Motoren, Fahren, Anzeige, Klang, Ereignisse, Sensoren, Variablen, Listen und Meine Blöcke. Mehrere Ereignisse laufen gleichzeitig.</p>
+          </article>
+          <article class="feature" style="--c:#0090f5">
+            <span class="swatch"></span>
+            <h3>Live ausprobieren</h3>
+            <p>Mit <b>▶ Start</b> läuft das Programm sofort und steuert den EV3 direkt. Die gerade aktiven Blöcke leuchten auf.</p>
+          </article>
+          <article class="feature" style="--c:#ff4ccd">
+            <span class="swatch"></span>
+            <h3>Auf den EV3 übertragen</h3>
+            <p>OpenStorm übersetzt das Programm in die Maschinensprache des EV3. Dann läuft es am Stein, ganz ohne iPad.</p>
+          </article>
+          <article class="feature" style="--c:#5cb1d6">
+            <span class="swatch"></span>
+            <h3>Geräte-Ansicht</h3>
+            <p>Zeigt, was an den Ports 1–4 und A–D steckt, mit Live-Werten. Motoren bewegen sich per Antippen und Halten.</p>
+          </article>
+          <article class="feature" style="--c:#0fbd8c">
+            <span class="swatch"></span>
+            <h3>Messwerte als Diagramm</h3>
+            <p>Sensorwerte aufzeichnen, als Liniendiagramm ansehen und als Tabelle für Excel oder Numbers speichern.</p>
+          </article>
+          <article class="feature" style="--c:#9966ff">
+            <span class="swatch"></span>
+            <h3>Simulator</h3>
+            <p>Kein EV3 zur Hand? Ein virtueller Stein im Browser mit Anzeige, Tönen und einstellbaren Sensoren.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Devices screenshot -->
+    <section class="section showcase">
+      <div class="wrap showcase-grid">
+        <div>
+          <p class="kicker">Geräte</p>
+          <h2>Sehen, was der Roboter sieht.</h2>
+          <p class="section-lead">Jeder Sensor und Motor bekommt eine Karte mit seinem aktuellen Wert. Modus umschalten, Motor antippen, Leuchte und Ton testen – praktisch, um Kabel und Ports zu prüfen, bevor das Programm losfährt.</p>
+          <a class="text-link" href="app/">Im Browser mit dem Simulator ausprobieren →</a>
+        </div>
+        <div class="shot">
+          <img src="img/devices.webp" width="1600" height="1118" alt="Geräte-Ansicht von OpenStorm mit Sensoren an den Ports 1 bis 4 und Motoren an A bis C">
+        </div>
+      </div>
+    </section>
+
+    <!-- What you need -->
+    <section class="section section-tight">
+      <div class="wrap">
+        <div class="need">
+          <div>
+            <p class="kicker">Was du brauchst</p>
+            <h2>Vier Dinge, einmal einrichten.</h2>
+          </div>
+          <ul class="need-list">
+            <li><b>LEGO MINDSTORMS EV3</b><span>Home-Set (31313) oder Education-Set</span></li>
+            <li><b>iPad</b><span>mit Safari, ohne zusätzliche App</span></li>
+            <li><b>Raspberry Pi Zero W</b><span>mit microSD-Karte (ab 8 GB)</span></li>
+            <li><b>Strom für den Pi</b><span>Powerbank oder der USB-Port des EV3</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Onboarding -->
+    <section class="section" id="einrichten">
+      <div class="wrap">
+        <p class="kicker">Einrichten</p>
+        <h2>In sechs Schritten startklar.</h2>
+        <p class="section-lead">Das machst du nur einmal. Danach genügt es, Pi und EV3 einzuschalten und OpenStorm auf dem iPad zu öffnen.</p>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="port">1</span>
+            <div class="step-body">
+              <h3>Image auf die SD-Karte schreiben</h3>
+              <p>Lade das <a href="https://github.com/mschneider85/openstorm/releases/download/pi-image/openstorm-pi.img.xz">Pi-Image</a> herunter und öffne den <a href="https://www.raspberrypi.com/software/">Raspberry Pi Imager</a> am PC oder Mac.</p>
+              <ul>
+                <li><em>Gerät:</em> „Raspberry Pi Zero“</li>
+                <li><em>Betriebssystem:</em> ganz unten „Eigenes Image“ und die heruntergeladene Datei – entpacken ist nicht nötig</li>
+                <li>SD-Karte wählen und schreiben; die Frage nach „OS-Anpassungen“ mit <em>Nein</em> beantworten</li>
+              </ul>
+            </div>
+          </li>
+          <li class="step">
+            <span class="port">2</span>
+            <div class="step-body">
+              <h3>Pi starten</h3>
+              <p>SD-Karte in den Pi stecken und Strom anschließen. Nach etwa einer Minute ist die Brücke bereit. Die grüne Leuchte am Pi zeigt den Zustand:</p>
+              <div class="leds">
+                <span class="led led-blink">blinkt langsam: bereit, kein EV3 verbunden</span>
+                <span class="led">leuchtet: mit dem EV3 verbunden</span>
+              </div>
+            </div>
+          </li>
+          <li class="step">
+            <span class="port">3</span>
+            <div class="step-body">
+              <h3>WLAN einrichten</h3>
+              <p>Beim ersten Start kennt der Pi dein WLAN noch nicht und öffnet sein eigenes, offenes WLAN <b>„OpenStorm“</b>.</p>
+              <ul>
+                <li>Auf dem iPad unter <em>Einstellungen → WLAN</em> „OpenStorm“ wählen. Der Hinweis „Ungesichertes Netzwerk“ ist normal.</li>
+                <li>Die Einrichtungsseite öffnet sich von selbst – sonst in Safari <code>http://10.42.0.1/wlan</code> aufrufen.</li>
+                <li>Dein WLAN wählen, Passwort eingeben, <b>„Verbinden“</b>. Pi und iPad wechseln in dein WLAN.</li>
+              </ul>
+              <p class="note">Klappt es nicht (z. B. Passwort vertippt), öffnet der Pi nach etwa einer Minute wieder „OpenStorm“ und zeigt den Fehler. Ohne Heim-WLAN geht es auch: <b>„Ohne Heim-WLAN weiter“</b> und die App unter <code>http://10.42.0.1</code> öffnen.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="port">4</span>
+            <div class="step-body">
+              <h3>EV3 vorbereiten</h3>
+              <p>Am EV3 unter <em>Einstellungen (Schraubenschlüssel) → Bluetooth</em>:</p>
+              <div class="toggles">
+                <span class="toggle on">Bluetooth</span>
+                <span class="toggle on">Sichtbarkeit</span>
+                <span class="toggle off">iPhone/iPad/iPod</span>
+              </div>
+              <p class="note">Den EV3 <b>nicht</b> in den Bluetooth-Einstellungen des iPads koppeln – das übernimmt der Pi.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="port">5</span>
+            <div class="step-body">
+              <h3>OpenStorm auf dem iPad öffnen</h3>
+              <p>In Safari <a class="mono" href="http://openstorm.local">openstorm.local</a> öffnen. Dann <em>Teilen</em> → <b>„Zum Home-Bildschirm“</b>: OpenStorm bekommt ein eigenes Symbol und startet im Vollbild wie eine richtige App.</p>
+              <p class="note">Projekte werden im Browser gespeichert, getrennt für jede Adresse. Nimm darum immer dieselbe Adresse.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="port">6</span>
+            <div class="step-body">
+              <h3>Mit dem EV3 verbinden</h3>
+              <ul>
+                <li>Oben rechts auf <span class="chip"><span class="chip-dot"></span>Nicht verbunden</span> tippen, dann auf <b>„Verbinden“</b>.</li>
+                <li>Die Brücke sucht EV3-Steine in der Nähe – deinen auswählen.</li>
+                <li>Der EV3 fragt nach dem Code <code>1234</code> – am Stein bestätigen.</li>
+              </ul>
+              <p>Ab jetzt verbindet sich OpenStorm beim Öffnen automatisch mit diesem EV3.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- First program -->
+    <section class="section first" id="erstes-programm">
+      <div class="wrap first-grid">
+        <div>
+          <p class="kicker">Erstes Programm</p>
+          <h2>Fahr ein Quadrat.</h2>
+          <ol class="mini-steps">
+            <li>Jedes Projekt beginnt mit <b>„Wenn Programm startet“</b>.</li>
+            <li>Aus <span class="cat" style="--c:#ffab19">Steuerung</span> <b>„wiederhole 4‑mal“</b> darunter ziehen.</li>
+            <li>Aus <span class="cat" style="--c:#ff4ccd">Fahren</span> zweimal <b>„fahre … für …“</b> hineinziehen: einmal vorwärts 20 cm, einmal nach rechts drehen 90 Grad.</li>
+            <li>Auf <span class="start">▶ Start</span> tippen – der Roboter fährt los.</li>
+          </ol>
+          <p class="section-lead small">Läuft's? Dann tippe oben auf den Projektnamen und beim Projekt auf <b>„⇩ Auf den EV3“</b>. Am Stein findest du es unter <em>Datei-Navigation</em> im Ordner mit dem Projektnamen – es läuft dann ganz ohne iPad.</p>
+        </div>
+        <div class="program" aria-label="Beispielprogramm: Quadrat fahren">
+          <div class="blk hat" style="--c:#ffbf00">Wenn Programm startet</div>
+          <div class="blk c" style="--c:#ffab19">
+            <div class="c-head">wiederhole <i>4</i> ‑mal</div>
+            <div class="c-body">
+              <div class="blk" style="--c:#ff4ccd">fahre <s>⬆ vorwärts ▾</s> für <i>20</i> <s>cm ▾</s></div>
+              <div class="blk" style="--c:#ff4ccd">fahre <s>↻ nach rechts drehen ▾</s> für <i>90</i> <s>Grad ▾</s></div>
+            </div>
+            <div class="c-foot"></div>
+          </div>
+          <div class="blk" style="--c:#cf63cf">spiele Klang <s>Hupe ▾</s> bis fertig</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Help -->
+    <section class="section" id="hilfe">
+      <div class="wrap narrow">
+        <p class="kicker">Hilfe</p>
+        <h2>Wenn's mal hakt.</h2>
+        <div class="faq">
+          <details>
+            <summary>Das WLAN „OpenStorm“ taucht nicht auf</summary>
+            <p>Gib dem Pi nach dem Einschalten 2–3 Minuten. Erscheint es dann nicht, steck die SD-Karte in den PC: Auf dem Laufwerk „bootfs“ liegt <code>openstorm-wlan.log</code> und zeigt, was beim Start passiert ist.</p>
+          </details>
+          <details>
+            <summary><code>openstorm.local</code> lässt sich nicht öffnen</summary>
+            <p>Pi und iPad müssen im selben WLAN sein. Leuchtet die grüne Leuchte am Pi nicht oder blinkt sie nicht, ist er noch nicht bereit. Ist der Pi im eigenen WLAN „OpenStorm“, lautet die Adresse <code>http://10.42.0.1</code>.</p>
+          </details>
+          <details>
+            <summary>Der EV3 wird nicht gefunden</summary>
+            <p>Prüfe am EV3: Bluetooth an, Sichtbarkeit an, iPhone/iPad/iPod aus. Ist der EV3 noch mit dem iPad oder einem anderen Gerät gekoppelt, die Kopplung dort entfernen. Das Protokoll der Brücke steht unter <a class="mono" href="http://openstorm.local/log">openstorm.local/log</a>.</p>
+          </details>
+          <details>
+            <summary>Ein weiteres WLAN hinzufügen (z. B. in der Schule)</summary>
+            <p>In der App unter <em>Verbindung → WLAN der Brücke</em> oder direkt unter <a class="mono" href="http://openstorm.local/wlan">openstorm.local/wlan</a>. Beim Einschalten nimmt der Pi jedes gespeicherte WLAN in Reichweite; ist keins da, öffnet er wieder „OpenStorm“.</p>
+          </details>
+          <details>
+            <summary>Wie bekomme ich Updates?</summary>
+            <p>Gibt es eine neue Version, meldet die App das beim Start. Unter <em>Verbindung → Brücke aktualisieren</em> auf „Jetzt aktualisieren“ tippen. Der Pi braucht dafür Internet über dein WLAN. Während des Updates den Pi nicht ausschalten.</p>
+          </details>
+          <details>
+            <summary>Meine Projekte sind weg</summary>
+            <p>Projekte liegen im Browser, getrennt für jede Adresse: <code>openstorm.local</code>, <code>10.42.0.1</code> und die App auf dem Home-Bildschirm haben jeweils eigene. Öffne OpenStorm darum immer auf demselben Weg. Mit „Als Datei sichern“ im Projekte-Fenster lassen sich Projekte zusätzlich sichern.</p>
+          </details>
+          <details>
+            <summary>Geht es auch ohne Raspberry Pi?</summary>
+            <p>Am PC oder Mac mit Chrome oder Edge kann <a href="app/">die App hier im Browser</a> den EV3 direkt über seinen Bluetooth-COM-Port ansteuern (Web Serial). Und der Simulator läuft in jedem Browser. Auf dem iPad braucht es den Pi.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Closing CTA -->
+    <section class="section">
+      <div class="wrap">
+        <div class="closing">
+          <h2>Bereit zum Bauen?</h2>
+          <p>Image laden, Pi einschalten, losprogrammieren.</p>
+          <div class="cta center">
+            <a class="btn btn-light" href="https://github.com/mschneider85/openstorm/releases/download/pi-image/openstorm-pi.img.xz">Pi-Image herunterladen</a>
+            <a class="btn btn-outline-light" href="https://github.com/mschneider85/openstorm">Quellcode auf GitHub</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <span class="brand small">&gt; openstorm<span class="cursor">_</span></span>
+      <p>Ein Hobby-Projekt. LEGO® und MINDSTORMS® sind Marken der LEGO Gruppe, die dieses Projekt weder unterstützt noch autorisiert.</p>
+      <a href="https://github.com/mschneider85/openstorm">GitHub</a>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
