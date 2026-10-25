@@ -1,7 +1,7 @@
 import type { ButtonName, LedPattern } from './bytecodes';
 import { ALL_PORTS, MOTOR_PORTS, type Brick, type MotorPort, type Port, type PortState } from './brick';
 import { DEVICES, TYPE_NONE } from './devices';
-import { SCREEN_WIDTH, type DrawOp } from './display';
+import { SCREEN_WIDTH, hides, type DrawOp } from './display';
 import { SAMPLE_RATE, soundSamples } from './sounds';
 
 /** Degrees per second at 100 % speed (a large motor does roughly 170 rpm). */
@@ -252,8 +252,12 @@ export class SimBrick implements Brick {
   }
 
   async draw(ops: DrawOp[]): Promise<void> {
-    const clear = ops.map((d) => d.op).lastIndexOf('clear');
-    this.screen = clear >= 0 ? ops.slice(clear) : [...this.screen, ...ops].slice(-3000);
+    // Keep only what is still visible: a fill hides everything drawn below it.
+    for (const d of ops) {
+      if (d.op === 'clear' || (d.op === 'rect' && d.fill)) this.screen = this.screen.filter((e) => !hides(d, e));
+      this.screen.push(d);
+    }
+    if (this.screen.length > 50000) this.screen = this.screen.slice(-50000);
     this.screenVersion++;
     this.changed();
   }

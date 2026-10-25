@@ -95,10 +95,13 @@ function load(id: string): void {
   }
   scrollToStart();
   workspace.clearUndo();
+  refreshUndo();
   onProjectChange();
 }
 
 let onProjectChange: () => void = () => {};
+/** Updates the undo/redo buttons (clearUndo fires no event). */
+let refreshUndo: () => void = () => {};
 
 export function openProject(id: string): void {
   save();
@@ -264,7 +267,7 @@ export function initEditor(container: HTMLElement, onChange: () => void): void {
     trashcan: false,
     zoom: { controls: true, wheel: true, pinch: true, startScale: 0.8, maxScale: 2, minScale: 0.4 },
     move: { scrollbars: true, drag: true, wheel: true },
-    grid: { spacing: 24, length: 2, colour: '#dde2e7', snap: true },
+    grid: { spacing: 24, length: 2, colour: '#232823', snap: true },
   });
 
   const projects = listProjects();
@@ -319,6 +322,7 @@ function addUndoButtons(container: HTMLElement): void {
     redo.disabled = workspace.getRedoStack().length === 0;
   };
   workspace.addChangeListener(update);
+  refreshUndo = update;
   update();
   container.append(bar);
 }
@@ -373,7 +377,10 @@ export async function startProgram(): Promise<void> {
         log(`Höchstens ${MAX_SERIES} Messreihen: „${name}“ wird nicht aufgezeichnet.`, 'error');
       }
     },
-    onLogClear: clearValues,
+    onLogClear: () => {
+      clearValues();
+      tooManySeries = false;
+    },
   });
   const current = run;
   try {

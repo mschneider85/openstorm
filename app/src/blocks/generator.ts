@@ -272,7 +272,7 @@ export function compile(workspace: Blockly.Workspace): { code: string; threads: 
       const fn = `async (api) => {\n${body}}`;
       if (block.type === 'ev3_start') threads.push(`{ kind: 'start', body: ${fn} }`);
       else if (block.type === 'ev3_when_message') threads.push(`{ kind: 'message', name: ${field(block, 'MESSAGE')}, body: ${fn} }`);
-      else threads.push(`{ kind: 'when', cond: async (api) => (${hatCondition(block, gen)}), body: ${fn} }`);
+      else threads.push(`{ kind: 'when', cond: async (api) => (${hatCondition(block, gen)}), body: ${fn}, edge: ${isEdgeHat(block)} }`);
     } else if (block.type.startsWith('procedures_def')) {
       gen.blockToCode(block);
     }
@@ -283,6 +283,22 @@ export function compile(workspace: Blockly.Workspace): { code: string; threads: 
     .join('');
   const body = `${init}const __threads = [\n${threads.map((t) => gen.prefixLines(t, gen.INDENT) + ',\n').join('')}];\nawait api.runThreads(__threads);\n`;
   return { code: gen.finish(body), threads: threads.length };
+}
+
+/** Event blocks whose condition is true once per event (a change or a release), not for as long as a state lasts. */
+export function isEdgeHat(b: B): boolean {
+  switch (b.type) {
+    case 'ev3_when_color':
+      return b.getFieldValue('COLOR') === 'change';
+    case 'ev3_when_touch':
+    case 'ev3_when_button':
+      return b.getFieldValue('EVENT') !== 'pressed';
+    case 'ev3_when_distance':
+    case 'ev3_when_angle':
+      return b.getFieldValue('OP') === 'CHANGE';
+    default:
+      return false;
+  }
 }
 
 /** Code of the blocks below an event block. */

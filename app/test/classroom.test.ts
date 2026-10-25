@@ -239,3 +239,45 @@ describe('operators and lists', () => {
     expect(() => compileRbf(ws)).toThrow(/nur Zahlen/);
   });
 });
+
+describe('review fixes', () => {
+  it('does not swallow a colour change that happens while the event stack runs', async () => {
+    const ws = workspace([
+      chain(
+        { type: 'ev3_when_color', fields: { PORT: '3', COLOR: 'change' } },
+        { type: 'ev3_wait', inputs: { SECONDS: num(0.15) } },
+        print({ block: { type: 'ev3_color_value', fields: { PORT: '3' } } }),
+      ),
+    ]);
+    const { program, printed } = await live(ws, (b) => {
+      b.types['3'] = 29;
+      b.sensorValues['3'][2] = 1;
+    });
+    await sleep(60);
+    brick.sensorValues['3'][2] = 5; // starts the stack
+    await sleep(80);
+    brick.sensorValues['3'][2] = 3; // changes while the stack still waits
+    await sleep(500);
+    await program.stop();
+    expect(printed).toEqual(['3', '3']);
+  });
+
+  it('keeps the simulated screen small without losing what is visible', async () => {
+    const sim = new SimBrick();
+    await sim.draw([{ op: 'clear' }, { op: 'circle', x: 20, y: 60, r: 10, fill: true, ink: 1 }]);
+    for (let i = 0; i < 500; i++) await sim.draw([{ op: 'rect', x: 0, y: 0, w: 178, h: 10, fill: true, ink: 0 }, { op: 'text', x: 0, y: 0, text: String(i), font: 0, ink: 1 }]);
+    sim.close();
+    expect(sim.screen.length).toBe(4);
+    expect(sim.screen[1].op).toBe('circle');
+    expect(sim.texts).toEqual(['499']);
+  });
+
+  it('sends only the visible part of a long text to the brick', async () => {
+    const { emitDraw } = await import('../src/ev3/display');
+    const texts: string[] = [];
+    emitDraw([{ op: 'text', x: 100, y: 0, text: 'x'.repeat(1000), font: 0, ink: 1 }], (_sub, args) => {
+      if (typeof args[3] === 'string') texts.push(args[3]);
+    });
+    expect(texts).toEqual(['x'.repeat(10)]);
+  });
+});

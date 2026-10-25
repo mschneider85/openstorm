@@ -9,7 +9,7 @@ import { portMask } from '../ev3/command';
 import { LINES, LINE_HEIGHT, SCREEN_HEIGHT, SCREEN_WIDTH, emitDraw, imageOps } from '../ev3/display';
 import { soundPath } from '../ev3/sounds';
 import { ENDLESS_TONE_MS, formatValue } from '../runtime/runner';
-import { HAT_TYPES } from './generator';
+import { HAT_TYPES, isEdgeHat } from './generator';
 
 /**
  * Compiles a workspace into an EV3 program (.rbf) that runs on the brick by
@@ -187,7 +187,8 @@ class Compiler {
       body();
       c.place(this.t.end);
       c.place(rest);
-      this.waitUntil(() => this.not(this.hatCondition(hat.block)));
+      // A change or release is true once per event; asking again would swallow the next one.
+      if (!isEdgeHat(hat.block)) this.waitUntil(() => this.not(this.hatCondition(hat.block)));
       c.op(op.MOVE8_8, lc(0), phase);
       c.jump(op.JR, top);
     }
@@ -1588,7 +1589,7 @@ class Compiler {
     });
 
     const t = this.t;
-    const saved = { scope: t.scope, loops: t.loops, end: t.end };
+    const saved = { scope: t.scope, loops: t.loops };
     const label = t.code.label();
     const result = wantResult ? { ty: this.staticType(def.getInputTargetBlock('RETURN')), op: [] as Operand } : undefined;
     if (result) result.op = this.tmp(result.ty);

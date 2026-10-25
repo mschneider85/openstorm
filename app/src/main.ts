@@ -51,7 +51,7 @@ $('#transfer-btn').addEventListener('click', async () => {
   }
 });
 $('#console-clear').addEventListener('click', () => ($('#datalog').hidden ? clearLog() : clearValues()));
-$('#datalog-csv').addEventListener('click', downloadCsv);
+$('#datalog-csv').addEventListener('click', () => void downloadCsv());
 for (const view of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {
   view.addEventListener('click', () => {
     showView(view.dataset.view as 'output' | 'datalog');

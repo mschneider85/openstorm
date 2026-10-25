@@ -20,7 +20,7 @@ type Body = (api: ProgramApi) => Promise<void>;
 /** A stack of blocks under an event block, as produced by the generator. */
 export type Thread =
   | { kind: 'start'; body: Body }
-  | { kind: 'when'; cond: (api: ProgramApi) => Promise<boolean>; body: Body }
+  | { kind: 'when'; cond: (api: ProgramApi) => Promise<boolean>; body: Body; edge?: boolean }
   | { kind: 'message'; name: string; body: Body };
 
 const POLL_MS = 40;
@@ -152,7 +152,7 @@ export class ProgramApi {
     }
     const tasks = threads.map((t) => {
       if (t.kind === 'start') return this.startRun(t.body).done;
-      if (t.kind === 'when') return this.listen(t.cond, t.body);
+      if (t.kind === 'when') return this.listen(t.cond, t.body, t.edge ?? false);
       return Promise.resolve();
     });
     try {
@@ -182,15 +182,19 @@ export class ProgramApi {
     return run;
   }
 
-  /** "Wenn …": runs the stack each time the condition becomes true. */
-  private async listen(cond: (api: ProgramApi) => Promise<boolean>, body: Body): Promise<void> {
+  /**
+   * "Wenn …": runs the stack each time the condition becomes true. An `edge`
+   * condition (a change, a release) is true only once per event, so there is no
+   * need to wait for it to end – and asking again would swallow the next event.
+   */
+  private async listen(cond: (api: ProgramApi) => Promise<boolean>, body: Body, edge: boolean): Promise<void> {
     const api = this.fork();
     for (;;) {
       await api.waitFor(() => cond(api));
       await this.startRun(body).done.catch((e: unknown) => {
         if (!(e instanceof StackStop)) throw e;
       });
-      while (await cond(api)) await api.sleep(POLL_MS);
+      if (!edge) while (await cond(api)) await api.sleep(POLL_MS);
     }
   }
 

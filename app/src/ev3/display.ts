@@ -40,7 +40,7 @@ export function emitDraw(ops: readonly DrawOp[], sink: DrawSink): void {
         break;
       case 'text':
         sink(uiDraw.SELECT_FONT, [d.font]);
-        sink(uiDraw.TEXT, [d.ink, i(d.x), i(d.y), d.text]);
+        sink(uiDraw.TEXT, [d.ink, i(d.x), i(d.y), visibleText(d)]);
         break;
       case 'pixel':
         sink(uiDraw.PIXEL, [d.ink, i(d.x), i(d.y)]);
@@ -59,6 +59,40 @@ export function emitDraw(ops: readonly DrawOp[], sink: DrawSink): void {
         break;
     }
   }
+}
+
+/** The part of a text that fits on the screen; longer texts would not fit into one direct command. */
+export function visibleText(d: { x: number; text: string; font: number }): string {
+  const width = (FONTS[d.font] ?? FONTS[0]).width;
+  return d.text.slice(0, Math.max(0, Math.ceil((SCREEN_WIDTH - Math.max(0, d.x)) / width)));
+}
+
+/** Smallest rectangle around what an op draws. */
+function bounds(d: DrawOp): { x: number; y: number; w: number; h: number } {
+  switch (d.op) {
+    case 'clear':
+      return { x: 0, y: 0, w: SCREEN_WIDTH, h: SCREEN_HEIGHT };
+    case 'text': {
+      const f = FONTS[d.font] ?? FONTS[0];
+      return { x: d.x, y: d.y, w: visibleText(d).length * f.width, h: f.height };
+    }
+    case 'pixel':
+      return { x: d.x, y: d.y, w: 1, h: 1 };
+    case 'line':
+      return { x: Math.min(d.x1, d.x2), y: Math.min(d.y1, d.y2), w: Math.abs(d.x2 - d.x1) + 1, h: Math.abs(d.y2 - d.y1) + 1 };
+    case 'circle':
+      return { x: d.x - d.r, y: d.y - d.r, w: 2 * d.r + 1, h: 2 * d.r + 1 };
+    default:
+      return { x: d.x, y: d.y, w: d.w, h: d.h };
+  }
+}
+
+/** Whether `later` paints over everything `earlier` drew (a filled rectangle around it). */
+export function hides(later: DrawOp, earlier: DrawOp): boolean {
+  if (later.op === 'clear') return true;
+  if (later.op !== 'rect' || !later.fill) return false;
+  const b = bounds(earlier);
+  return b.x >= later.x && b.y >= later.y && b.x + b.w <= later.x + later.w && b.y + b.h <= later.y + later.h;
 }
 
 /** Ops that clear one text line and write into it, as "schreibe … in Zeile" does. */
