@@ -165,8 +165,11 @@ export function importProject(json: string): void {
 
 // --- Programs on the EV3 ------------------------------------------------------------
 
-/** Next to every program the blocks are stored, hidden from the brick's file browser. */
-const SOURCE_FILE = '.openstorm';
+/**
+ * Next to every program the blocks are stored. The brick's file browser hides unknown
+ * extensions; the firmware only accepts extensions of up to three letters.
+ */
+const SOURCE_FILE = 'blocks.osb';
 
 /**
  * Folder and program name on the brick: ASCII letters, digits, "_" and "-". At most

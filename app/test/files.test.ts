@@ -31,6 +31,11 @@ class FakeFileBrick implements Transport {
     const text = (from: number) => String.fromCharCode(...p.subarray(from, p.indexOf(0, from)));
     const u32 = (n: number) => [n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, n >>> 24];
     if (cmd === 0x92) {
+      // Like cMemoryCheckFilename: name below 32, extension below 5 characters.
+      const file = text(4).split('/').pop()!;
+      const dot = file.includes('.') ? file.indexOf('.') : file.length;
+      const [name, ext] = [file.slice(0, dot), file.slice(dot)];
+      if (name.length >= 32 || ext.length >= 5) return reply(4, 0xff);
       this.writing = { path: text(4), data: [], size: p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24) };
       reply(0, 1);
     } else if (cmd === 0x93) {
@@ -84,11 +89,12 @@ describe('files on the EV3', () => {
     const files = new Ev3Files(new Ev3Connection(brick));
     const data = Uint8Array.from({ length: 2500 }, (_, i) => i & 0xff);
     await files.write('../prjs/Mein_Roboter/Mein_Roboter.rbf', data);
-    await files.write('../prjs/Mein_Roboter/.openstorm', new TextEncoder().encode('{}'));
+    await files.write('../prjs/Mein_Roboter/blocks.osb', new TextEncoder().encode('{}'));
+    await expect(files.write('../prjs/Mein_Roboter/.openstorm', new Uint8Array(1))).rejects.toThrow(/Dateiname ungültig/);
     expect(brick.files.get('../prjs/Mein_Roboter/Mein_Roboter.rbf')).toEqual(data);
 
     expect(await files.list('../prjs/')).toEqual({ folders: ['Mein_Roboter'], files: [] });
-    expect((await files.list('../prjs/Mein_Roboter/')).files.sort()).toEqual(['.openstorm', 'Mein_Roboter.rbf']);
+    expect((await files.list('../prjs/Mein_Roboter/')).files.sort()).toEqual(['Mein_Roboter.rbf', 'blocks.osb']);
     expect(await files.read('../prjs/Mein_Roboter/Mein_Roboter.rbf')).toEqual(data);
     await expect(files.read('../prjs/fehlt')).rejects.toThrow(/nicht gefunden/);
   });

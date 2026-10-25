@@ -19,7 +19,8 @@ export interface BrickFiles {
 const CHUNK = 900;
 
 const STATUS: Record<number, string> = {
-  4: 'zu viele offene Dateien',
+  // The firmware also answers this when it rejects the file name.
+  4: 'Dateiname ungültig oder zu viele offene Dateien',
   5: 'keine Berechtigung',
   6: 'ungültiger Pfad',
   9: 'zu wenig Platz auf dem EV3',
